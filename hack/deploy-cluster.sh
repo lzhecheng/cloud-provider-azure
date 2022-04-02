@@ -54,32 +54,36 @@ function cleanup() {
 }
 trap cleanup EXIT
 
-base_manifest=${REPO_ROOT}/examples/aks-engine.json
-if [ ! -z "${ENABLE_AVAILABILITY_ZONE:-}" ]; then
-    base_manifest=${REPO_ROOT}/examples/az.json
+if [[ -n $CUSTOMIZED_MANIFEST ]]; then
+  base_manifest=$CUSTOMIZED_MANIFEST
+else
+  base_manifest=${REPO_ROOT}/examples/aks-engine.json
+  if [ ! -z "${ENABLE_AVAILABILITY_ZONE:-}" ]; then
+      base_manifest=${REPO_ROOT}/examples/az.json
+  fi
 fi
 
 # Configure the manifests for aks-engine
 cat ${base_manifest} | \
   jq ".properties.orchestratorProfile.kubernetesConfig.customCcmImage=\"${CCM_IMAGE}\"" | \
   jq ".properties.orchestratorProfile.kubernetesConfig.addons[0].containers[0].image=\"${CNM_IMAGE}\"" | \
-  jq ".properties.servicePrincipalProfile.clientID=\"${CLIENT_ID}\"" | \
-  jq ".properties.servicePrincipalProfile.secret=\"${CLIENT_SECRET}\"" \
+  jq ".properties.servicePrincipalProfile.clientID=\"${AZURE_CLIENT_ID}\"" | \
+  jq ".properties.servicePrincipalProfile.secret=\"${AZURE_CLIENT_SECRET}\"" \
   > ${manifest_file}
 
 # Deploy the cluster
 echo "Deploying kubernetes cluster to resource group ${RESOURCE_GROUP_NAME}..."
-aks-engine deploy --subscription-id ${SUBSCRIPTION_ID} \
+aks-engine deploy --subscription-id ${AZURE_SUBSCRIPTION_ID} \
   --auth-method client_secret \
   --auto-suffix \
   --resource-group ${RESOURCE_GROUP_NAME} \
-  --location ${LOCATION} \
+  --location ${AZURE_LOCATION} \
   --api-model ${manifest_file} \
-  --client-id ${CLIENT_ID} \
-  --client-secret ${CLIENT_SECRET}
+  --client-id ${AZURE_CLIENT_ID} \
+  --client-secret ${AZURE_CLIENT_SECRET}
 echo "Kubernetes cluster deployed. Please find the kubeconfig for it in _output/"
 
-export KUBECONFIG=_output/$(ls -t _output | head -n 1)/kubeconfig/kubeconfig.${LOCATION}.json
+export KUBECONFIG=_output/$(ls -t _output | head -n 1)/kubeconfig/kubeconfig.${AZURE_LOCATION}.json
 echo "Kubernetes cluster deployed. Please find the kubeconfig at ${KUBECONFIG}"
 
 # Deploy AzureDisk CSI Plugin
