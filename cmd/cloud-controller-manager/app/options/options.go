@@ -77,6 +77,7 @@ type CloudControllerManagerOptions struct {
 
 	Master     string
 	Kubeconfig string
+	EnableARG  bool
 
 	// NodeStatusUpdateFrequency is the frequency at which the controller updates nodes' status
 	NodeStatusUpdateFrequency metav1.Duration
