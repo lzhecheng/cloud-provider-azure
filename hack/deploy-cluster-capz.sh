@@ -42,6 +42,7 @@ export AZURE_CLOUD_NODE_MANAGER_IMG="${AZURE_CLOUD_NODE_MANAGER_IMG:-mcr.microso
 export KUBERNETES_VERSION="${KUBERNETES_VERSION:-v1.23.0}"
 export EXP_MACHINE_POOL=true
 export EXP_CLUSTER_RESOURCE_SET=true
+export DEPLOY_WINDOWS_CLUSTER="${DEPLOY_WINDOWS_CLUSTER:false}"
 
 export LB_SKU="${LB_SKU:-Standard}"
 export ENABLE_MULTI_SLB="${ENABLE_MULTI_SLB:-false}"
@@ -51,6 +52,10 @@ export PUT_VMSS_VM_BATCH_SIZE="${PUT_VMSS_VM_BATCH_SIZE:-0}"
 if [ "${AZURE_SSH_PUBLIC_KEY}" ]; then
   AZURE_SSH_PUBLIC_KEY_B64="$(echo -n "${AZURE_SSH_PUBLIC_KEY}" | base64 | tr -d '\n')"
   export AZURE_SSH_PUBLIC_KEY_B64
+fi
+
+if [ "${DEPLOY_WINDOWS_CLUSTER}" == true ]; then
+  WORKLOAD_CLUSTER_TEMPLATE="${WORKLOAD_CLUSTER_TEMPLATE_DIR}/vmss-multi-nodepool-windows.yaml"
 fi
 
 source "${REPO_ROOT}/hack/ensure-kind.sh"
