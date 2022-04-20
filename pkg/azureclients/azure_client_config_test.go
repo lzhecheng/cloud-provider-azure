@@ -32,6 +32,13 @@ func TestWithRateLimiter(t *testing.T) {
 	assert.Nil(t, config.RateLimitConfig)
 }
 
+func TestCheckARG(t *testing.T) {
+	config := &ClientConfig{}
+	assert.False(t, config.EnabledARG)
+	c := config.CheckARG(map[string]bool{"fakeClient": true}, "fakeClient")
+	assert.True(t, c.EnabledARG)
+}
+
 func TestRateLimitEnabled(t *testing.T) {
 	assert.Equal(t, false, RateLimitEnabled(nil))
 	config := &RateLimitConfig{}

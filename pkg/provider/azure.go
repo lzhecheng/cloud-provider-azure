@@ -91,6 +91,27 @@ var (
 	defaultRouteUpdateWaitingInSeconds = 30
 )
 
+var (
+	// The following variables are used to check clients with ARG enabled or not.
+	diskClient           = "diskClient"
+	fileClient           = "fileClient"
+	interfaceClient      = "interfaceClient"
+	loadbalancerClient   = "loadbalancerClient"
+	publicipClient       = "publicipClient"
+	routeClient          = "routeClient"
+	routetableClient     = "routetableClient"
+	securitygroupClient  = "securitygroupClient"
+	snapshotClient       = "snapshotClient"
+	storageaccountClient = "storageaccountClient"
+	subnetClient         = "subnetClient"
+	vmasClient           = "vmasClient"
+	vmClient             = "vmClient"
+	vmsizeClient         = "vmsizeClient"
+	vmssClient           = "vmssClient"
+	vmssvmClient         = "vmssvmClient"
+	zoneClient           = "zoneClient"
+)
+
 // Config holds the configuration parsed from the --cloud-config flag
 // All fields are required unless otherwise specified
 // NOTE: Cloud config files should follow the same Kubernetes deprecation policy as
@@ -249,6 +270,8 @@ type Config struct {
 	PutVMSSVMBatchSize int `json:"putVMSSVMBatchSize" yaml:"putVMSSVMBatchSize"`
 	// PrivateLinkServiceResourceGroup determines the specific resource group of the private link services user want to use
 	PrivateLinkServiceResourceGroup string `json:"privateLinkServiceResourceGroup,omitempty" yaml:"privateLinkServiceResourceGroup,omitempty"`
+	// EnabledARGClients defines which clients are ARG enabled.
+	EnabledARGClients map[string]bool `json:"enabledARGClients,omitempty" yaml:"enabledARGClients,omitempty"`
 }
 
 type InitSecretConfig struct {
@@ -780,27 +803,27 @@ func (az *Cloud) configAzureClients(
 	azClientConfig := az.getAzureClientConfig(servicePrincipalToken)
 
 	// Prepare AzureClientConfig for all azure clients
-	interfaceClientConfig := azClientConfig.WithRateLimiter(az.Config.InterfaceRateLimit)
-	vmSizeClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineSizeRateLimit)
-	snapshotClientConfig := azClientConfig.WithRateLimiter(az.Config.SnapshotRateLimit)
-	storageAccountClientConfig := azClientConfig.WithRateLimiter(az.Config.StorageAccountRateLimit)
-	diskClientConfig := azClientConfig.WithRateLimiter(az.Config.DiskRateLimit)
-	vmClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineRateLimit)
-	vmssClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineScaleSetRateLimit)
+	interfaceClientConfig := azClientConfig.WithRateLimiter(az.Config.InterfaceRateLimit).CheckARG(az.Config.EnabledARGClients, interfaceClient)
+	vmSizeClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineSizeRateLimit).CheckARG(az.Config.EnabledARGClients, vmsizeClient)
+	snapshotClientConfig := azClientConfig.WithRateLimiter(az.Config.SnapshotRateLimit).CheckARG(az.Config.EnabledARGClients, snapshotClient)
+	storageAccountClientConfig := azClientConfig.WithRateLimiter(az.Config.StorageAccountRateLimit).CheckARG(az.Config.EnabledARGClients, storageaccountClient)
+	diskClientConfig := azClientConfig.WithRateLimiter(az.Config.DiskRateLimit).CheckARG(az.Config.EnabledARGClients, diskClient)
+	vmClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineRateLimit).CheckARG(az.Config.EnabledARGClients, vmClient)
+	vmssClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineScaleSetRateLimit).CheckARG(az.Config.EnabledARGClients, vmssClient)
 	// Error "not an active Virtual Machine Scale Set VM" is not retriable for VMSS VM.
 	// But http.StatusNotFound is retriable because of ARM replication latency.
-	vmssVMClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineScaleSetRateLimit)
+	vmssVMClientConfig := azClientConfig.WithRateLimiter(az.Config.VirtualMachineScaleSetRateLimit).CheckARG(az.Config.EnabledARGClients, vmssvmClient)
 	vmssVMClientConfig.Backoff = vmssVMClientConfig.Backoff.WithNonRetriableErrors([]string{consts.VmssVMNotActiveErrorMessage}).WithRetriableHTTPStatusCodes([]int{http.StatusNotFound})
-	routeClientConfig := azClientConfig.WithRateLimiter(az.Config.RouteRateLimit)
-	subnetClientConfig := azClientConfig.WithRateLimiter(az.Config.SubnetsRateLimit)
-	routeTableClientConfig := azClientConfig.WithRateLimiter(az.Config.RouteTableRateLimit)
-	loadBalancerClientConfig := azClientConfig.WithRateLimiter(az.Config.LoadBalancerRateLimit)
-	securityGroupClientConfig := azClientConfig.WithRateLimiter(az.Config.SecurityGroupRateLimit)
-	publicIPClientConfig := azClientConfig.WithRateLimiter(az.Config.PublicIPAddressRateLimit)
+	routeClientConfig := azClientConfig.WithRateLimiter(az.Config.RouteRateLimit).CheckARG(az.Config.EnabledARGClients, routeClient)
+	subnetClientConfig := azClientConfig.WithRateLimiter(az.Config.SubnetsRateLimit).CheckARG(az.Config.EnabledARGClients, subnetClient)
+	routeTableClientConfig := azClientConfig.WithRateLimiter(az.Config.RouteTableRateLimit).CheckARG(az.Config.EnabledARGClients, routetableClient)
+	loadBalancerClientConfig := azClientConfig.WithRateLimiter(az.Config.LoadBalancerRateLimit).CheckARG(az.Config.EnabledARGClients, loadbalancerClient)
+	securityGroupClientConfig := azClientConfig.WithRateLimiter(az.Config.SecurityGroupRateLimit).CheckARG(az.Config.EnabledARGClients, securitygroupClient)
+	publicIPClientConfig := azClientConfig.WithRateLimiter(az.Config.PublicIPAddressRateLimit).CheckARG(az.Config.EnabledARGClients, publicipClient)
 	// TODO(ZeroMagic): add azurefileRateLimit
-	fileClientConfig := azClientConfig.WithRateLimiter(nil)
-	vmasClientConfig := azClientConfig.WithRateLimiter(az.Config.AvailabilitySetRateLimit)
-	zoneClientConfig := azClientConfig.WithRateLimiter(nil)
+	fileClientConfig := azClientConfig.WithRateLimiter(nil).CheckARG(az.Config.EnabledARGClients, fileClient)
+	vmasClientConfig := azClientConfig.WithRateLimiter(az.Config.AvailabilitySetRateLimit).CheckARG(az.Config.EnabledARGClients, vmasClient)
+	zoneClientConfig := azClientConfig.WithRateLimiter(nil).CheckARG(az.Config.EnabledARGClients, zoneClient)
 
 	// If uses network resources in different AAD Tenant, update Authorizer for VM/VMSS/VMAS client config
 	if multiTenantServicePrincipalToken != nil {
