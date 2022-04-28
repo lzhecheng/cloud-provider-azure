@@ -224,8 +224,7 @@ func (c *Client) PreparePutRequest(ctx context.Context, decorators ...autorest.P
 	decorators = append(
 		[]autorest.PrepareDecorator{
 			autorest.AsContentType("application/json; charset=utf-8"),
-			autorest.AsPut(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsPut()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -235,8 +234,7 @@ func (c *Client) PreparePatchRequest(ctx context.Context, decorators ...autorest
 	decorators = append(
 		[]autorest.PrepareDecorator{
 			autorest.AsContentType("application/json; charset=utf-8"),
-			autorest.AsPatch(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsPatch()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -246,8 +244,7 @@ func (c *Client) PreparePostRequest(ctx context.Context, decorators ...autorest.
 	decorators = append(
 		[]autorest.PrepareDecorator{
 			autorest.AsContentType("application/json; charset=utf-8"),
-			autorest.AsPost(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsPost()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -256,8 +253,7 @@ func (c *Client) PreparePostRequest(ctx context.Context, decorators ...autorest.
 func (c *Client) PrepareGetRequest(ctx context.Context, decorators ...autorest.PrepareDecorator) (*http.Request, error) {
 	decorators = append(
 		[]autorest.PrepareDecorator{
-			autorest.AsGet(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsGet()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -266,8 +262,7 @@ func (c *Client) PrepareGetRequest(ctx context.Context, decorators ...autorest.P
 func (c *Client) PrepareDeleteRequest(ctx context.Context, decorators ...autorest.PrepareDecorator) (*http.Request, error) {
 	decorators = append(
 		[]autorest.PrepareDecorator{
-			autorest.AsDelete(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsDelete()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -276,8 +271,7 @@ func (c *Client) PrepareDeleteRequest(ctx context.Context, decorators ...autores
 func (c *Client) PrepareHeadRequest(ctx context.Context, decorators ...autorest.PrepareDecorator) (*http.Request, error) {
 	decorators = append(
 		[]autorest.PrepareDecorator{
-			autorest.AsHead(),
-			autorest.WithBaseURL(c.baseURI)},
+			autorest.AsHead()},
 		decorators...)
 	return c.prepareRequest(ctx, decorators...)
 }
@@ -330,16 +324,37 @@ func (c *Client) SendAsync(ctx context.Context, request *http.Request) (*azure.F
 	return &future, asyncResponse, nil
 }
 
-// GetResource get a resource by resource ID
+// GetResourceWithExpandQuery get a resource by resource ID with expand
 func (c *Client) GetResourceWithExpandQuery(ctx context.Context, resourceID, expand string) (*http.Response, *retry.Error) {
 	var decorators []autorest.PrepareDecorator
-	if expand != "" {
-		queryParameters := map[string]interface{}{
-			"$expand": autorest.Encode("query", expand),
-		}
-		decorators = append(decorators, autorest.WithQueryParameters(queryParameters))
+	queryParameters := map[string]interface{}{
+		"$expand": autorest.Encode("query", expand),
 	}
+	decorators = append(decorators, autorest.WithQueryParameters(queryParameters))
 	return c.GetResource(ctx, resourceID, decorators...)
+}
+
+// GetResourceWithExpandAPIVersionQuery get a resource by resource ID with expand and API version.
+func (c *Client) GetResourceWithExpandAPIVersionQuery(ctx context.Context, resourceID, expand, apiVersion string) (*http.Response, *retry.Error) {
+	decorators := []autorest.PrepareDecorator{
+		autorest.WithPathParameters("{resourceID}", map[string]interface{}{"resourceID": resourceID}),
+		autorest.WithQueryParameters(map[string]interface{}{
+			"$expand": autorest.Encode("query", expand),
+		}),
+		autorest.AsGet(),
+		autorest.WithBaseURL(c.baseURI),
+		withAPIVersion(apiVersion),
+	}
+
+	preparer := autorest.CreatePreparer(decorators...)
+	request, err := preparer.Prepare((&http.Request{}).WithContext(ctx))
+
+	if err != nil {
+		klog.V(5).Infof("Received error in %s: resourceID: %s, error: %s", "get.prepare", resourceID, err)
+		return nil, retry.NewError(false, err)
+	}
+
+	return c.Send(ctx, request)
 }
 
 // GetResourceWithDecorators get a resource with decorators by resource ID
@@ -731,7 +746,10 @@ func (c *Client) CloseResponse(ctx context.Context, response *http.Response) {
 func (c *Client) prepareRequest(ctx context.Context, decorators ...autorest.PrepareDecorator) (*http.Request, error) {
 	decorators = append(
 		decorators,
-		withAPIVersion(c.apiVersion))
+		[]autorest.PrepareDecorator{
+			autorest.WithBaseURL(c.baseURI),
+			withAPIVersion(c.apiVersion),
+		}...)
 	preparer := autorest.CreatePreparer(decorators...)
 	return preparer.Prepare((&http.Request{}).WithContext(ctx))
 }
