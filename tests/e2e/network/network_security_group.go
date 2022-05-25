@@ -50,8 +50,8 @@ var _ = Describe("Network security group", func() {
 		"app": serviceName,
 	}
 	ports := []v1.ServicePort{{
-		Port:       nginxPort,
-		TargetPort: intstr.FromInt(nginxPort),
+		Port:       serverPort,
+		TargetPort: intstr.FromInt(serverPort),
 	}}
 
 	BeforeEach(func() {
@@ -66,7 +66,7 @@ var _ = Describe("Network security group", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		utils.Logf("Creating deployment " + serviceName)
-		deployment := createNginxDeploymentManifest(serviceName, labels)
+		deployment := createServerDeploymentManifest(serviceName, labels)
 		_, err = cs.AppsV1().Deployments(ns.Name).Create(context.TODO(), deployment, metav1.CreateOptions{})
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -93,14 +93,14 @@ var _ = Describe("Network security group", func() {
 		}()
 
 		By("Validating ip exists in Security Group")
-		port := fmt.Sprintf("%v", nginxPort)
+		port := fmt.Sprintf("%d", serverPort)
 		nsgs, err := tc.GetClusterSecurityGroups()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(validateUnsharedSecurityRuleExists(nsgs, ip, port)).To(BeTrue(), "Security rule for service %s not exists", serviceName)
 
 		By("Validating network security group working")
 		var code int
-		url := fmt.Sprintf("http://%s:%v", ip, ports[0].Port)
+		url := fmt.Sprintf("http://%s:%d", ip, ports[0].Port)
 		for i := 1; i <= 30; i++ {
 			utils.Logf("round %d, GET %s", i, url)
 			/* #nosec G107: Potential HTTP request made with variable url */

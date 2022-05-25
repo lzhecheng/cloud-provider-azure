@@ -149,13 +149,29 @@ func CreateHostExecPod(cs clientset.Interface, ns, name string) (bool, error) {
 			Containers: []v1.Container{
 				{
 					Name:            "agnhost",
-					Image:           "gcr.io/kubernetes-e2e-test-images/agnhost:2.6",
+					Image:           "k8s.gcr.io/e2e-test-images/agnhost:2.36",
 					Args:            []string{"pause"},
 					ImagePullPolicy: v1.PullIfNotPresent,
 				},
 			},
 			HostNetwork:                   true,
 			TerminationGracePeriodSeconds: &immediate,
+			// Set the Pod to control plane Node because it is a Linux one
+			Tolerations: []v1.Toleration{
+				{
+					Key:      controlPlaneNodeRoleLabel,
+					Operator: v1.TolerationOpExists,
+					Effect:   v1.TaintEffectNoSchedule,
+				},
+				{
+					Key:      masterNodeRoleLabel,
+					Operator: v1.TolerationOpExists,
+					Effect:   v1.TaintEffectNoSchedule,
+				},
+			},
+			NodeSelector: map[string]string{
+				controlPlaneNodeRoleLabel: "",
+			},
 		},
 	}
 	if _, err := cs.CoreV1().Pods(ns).Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
