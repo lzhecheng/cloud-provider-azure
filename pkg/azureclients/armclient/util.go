@@ -103,7 +103,7 @@ func WithMetricsSendDecoratorWrapper(prefix, request, resourceGroup, subscriptio
 	return nil
 }
 
-// DoExponentialBackoffRetry returns an autorest.SendDecorator which performs retry with customizable backoff policy.
+// DoHackRegionalRetryDecorator returns an autorest.SendDecorator which performs retry with customizable backoff policy.
 func DoHackRegionalRetryDecorator(c *Client) autorest.SendDecorator {
 	return func(s autorest.Sender) autorest.Sender {
 		return autorest.SenderFunc(func(request *http.Request) (*http.Response, error) {
@@ -112,9 +112,7 @@ func DoHackRegionalRetryDecorator(c *Client) autorest.SendDecorator {
 				klog.V(2).Infof("response is empty")
 				return response, rerr
 			}
-			if rerr == nil || response.StatusCode == http.StatusNotFound || c.regionalEndpoint == "" {
-				return response, rerr
-			}
+
 			// Hack: retry the regional ARM endpoint in case of ARM traffic split and arm resource group replication is too slow
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			defer func() {
@@ -122,6 +120,17 @@ func DoHackRegionalRetryDecorator(c *Client) autorest.SendDecorator {
 			}()
 
 			bodyString := string(bodyBytes)
+			trimmed := strings.TrimSpace(bodyString)
+			// We need to retry with regional endpoint because replication latency is possible, which returns empty content
+			// and 2xx http status code.
+			// Issue: https://github.com/kubernetes-sigs/cloud-provider-azure/issues/1296
+			emptyResp := (response.ContentLength == 0 || trimmed == "" || trimmed == "{}") && response.StatusCode >= 200 && response.StatusCode < 300
+			if rerr == nil || response.StatusCode == http.StatusNotFound || c.regionalEndpoint == "" {
+				if !emptyResp {
+					return response, rerr
+				}
+			}
+
 			var body map[string]interface{}
 			if e := json.Unmarshal(bodyBytes, &body); e != nil {
 				klog.Errorf("Send.sendRequest: error in parsing response body string: %s, Skip retrying regional host", e.Error())
@@ -129,9 +138,8 @@ func DoHackRegionalRetryDecorator(c *Client) autorest.SendDecorator {
 			}
 			klog.V(5).Infof("Send.sendRequest original response: %s", bodyString)
 
-			if err, ok := body["error"].(map[string]interface{}); !ok ||
-				err["code"] == nil ||
-				!strings.EqualFold(err["code"].(string), "ResourceGroupNotFound") {
+			err, ok := body["error"].(map[string]interface{})
+			if (!ok || err["code"] == nil || !strings.EqualFold(err["code"].(string), "ResourceGroupNotFound")) && !emptyResp {
 				klog.V(5).Infof("Send.sendRequest: response body does not contain ResourceGroupNotFound error code. Skip retrying regional host")
 				return response, rerr
 			}

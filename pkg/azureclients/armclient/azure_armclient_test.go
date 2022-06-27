@@ -109,6 +109,43 @@ func TestSendFailureRegionalRetry(t *testing.T) {
 	assert.Equal(t, http.StatusOK, response.StatusCode)
 }
 
+func TestSendFailureReplicationLatency(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("{}"))
+		assert.NoError(t, err)
+	}))
+	globalServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "{}", http.StatusOK)
+	}))
+
+	azConfig := azureclients.ClientConfig{Backoff: &retry.Backoff{Steps: 3}, UserAgent: "test", Location: "eastus"}
+	armClient := New(nil, azConfig, server.URL, "2019-01-01")
+	targetURL, _ := url.Parse(server.URL)
+	armClient.regionalEndpoint = targetURL.Host
+	pathParameters := map[string]interface{}{
+		"resourceGroupName": autorest.Encode("path", "testgroup"),
+		"subscriptionId":    autorest.Encode("path", "testid"),
+		"resourceName":      autorest.Encode("path", "testname"),
+	}
+
+	decorators := []autorest.PrepareDecorator{
+		autorest.WithPathParameters(
+			"/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vNets/{resourceName}", pathParameters),
+		autorest.WithBaseURL(globalServer.URL),
+	}
+
+	ctx := context.Background()
+	request, err := armClient.PrepareGetRequest(ctx, decorators...)
+	assert.NoError(t, err)
+
+	response, rerr := armClient.Send(ctx, request)
+	assert.Nil(t, rerr)
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, targetURL.Host, response.Request.URL.Host)
+}
+
 func TestSendFailure(t *testing.T) {
 	count := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
