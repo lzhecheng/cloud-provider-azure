@@ -1,0 +1,68 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-18.04
+
+variables:
+  DisableDockerDetector: true
+
+stages:
+  - stage: ccm_image_stage
+    dependsOn: []
+    jobs:
+    - job: build_push_ccm_image_job
+      timeoutInMinutes: 30
+      steps:
+        - template: ./docker-login.yml
+        - bash: |
+            # TODO: rebase on master
+            git show --stat
+            IMAGE_REGISTRY=$(registry.url) make build-ccm-image-amd64
+          displayName: make ccm
+        - bash: |
+            IMAGE_REGISTRY=$(registry.url) make push-ccm-image-amd64
+          displayName: push ccm
+
+  - stage: cnm_image_stage
+    dependsOn: []
+    jobs:
+    - job: build_push_cnm_image_job
+      timeoutInMinutes: 30
+      steps:
+        - template: ./docker-login.yml
+        - bash: |
+            # TODO: rebase on master
+            git show --stat
+            IMAGE_REGISTRY=$(registry.url) make build-node-image-linux-amd64
+          displayName: make cnm
+        - bash: |
+            IMAGE_REGISTRY=$(registry.url) make push-node-image-linux-amd64
+          displayName: push cnm
+
+  - stage: create_aks_cluster_and_run_tests_stage
+    dependsOn: [ccm_image_stage, cnm_image_stage]
+    jobs:
+    - job: create_aks_cluster_and_run_tests_job
+      timeoutInMinutes: 100
+      steps:
+        - bash: |
+            export AZURE_SUBSCRIPTION=$(az.subscription)
+            export SP_CLIENT_ID=$(serviceprincipal.client_id)
+            export SP_CLIENT_SECRET=$(serviceprincipal.client_secret)
+            export TENANT_ID=$(az.tenant_id)
+            export IMAGE_REGISTRY=$(registry.url)
+            .pipelines/scripts/deploy-aks-cluster.sh
+          displayName: create an aks cluster
+        - bash: |
+            export AZURE_SUBSCRIPTION=$(az.subscription)
+            export SP_CLIENT_ID=$(serviceprincipal.client_id)
+            export SP_CLIENT_SECRET=$(serviceprincipal.client_secret)
+            export IMAGE_REGISTRY=$(registry.url)
+            export E2E_ON_AKS_CLUSTER=true
+            export KUBECONFIG=aks-cluster.kubeconfig
+            kubectl get node -owide
+            make test-ccm-e2e
+          displayName: run ccm e2e test
+        - bash: |
+            .pipelines/scripts/gc-aks-cluster.sh
+          displayName: gc the aks cluster
