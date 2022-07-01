@@ -1,0 +1,31 @@
+name: $(Date:yyyyMMdd)$(Rev:.r)_$(OS_SKU)$(OS_VERSION)_$(HYPERV_GENERATION)_$(FEATURE_FLAGS)_$(Build.SourceBranchName)
+trigger: none
+
+pool:
+  vmImage: ubuntu-18.04
+
+stages:
+  - stage: build_ccm_images
+    dependsOn: []
+    jobs:
+    - job: build
+      timeoutInMinutes: 180
+      steps:
+        - bash: |
+            make build-ccm-image-amd64
+          displayName: make ccm
+        - bash: |
+            echo "build ccm images finished"
+          displayName: make ccm finish
+  - stage: build_cnm_images
+    dependsOn: []
+    jobs:
+    - job: build
+      timeoutInMinutes: 180
+      steps:
+        - bash: |
+            make build-node-image-linux-amd64
+          displayName: make cnm
+        - bash: |
+            echo "build cnm images finished"
+          displayName: make cnm finish
