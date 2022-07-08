@@ -78,6 +78,8 @@ var _ = Describe("Service with annotation", func() {
 	}}
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		var err error
 		cs, err = utils.CreateKubeClientSet()
 		Expect(err).NotTo(HaveOccurred())

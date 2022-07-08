@@ -54,6 +54,8 @@ var _ = Describe("Azure node resources", func() {
 	var tc *utils.AzureTestClient
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		var err error
 		cs, err = utils.CreateKubeClientSet()
 		Expect(err).NotTo(HaveOccurred())

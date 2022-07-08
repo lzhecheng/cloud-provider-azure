@@ -32,6 +32,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
+	. "github.com/onsi/ginkgo"
 )
 
 const (
@@ -187,4 +189,10 @@ func StringInSlice(s string, list []string) bool {
 		}
 	}
 	return false
+}
+
+func SkipIfAKSCluster() {
+	if strings.EqualFold(os.Getenv(AKSCluster), "true") {
+		Skip("Skip for AKS cluster")
+	}
 }

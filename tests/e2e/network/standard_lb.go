@@ -52,6 +52,8 @@ var _ = Describe("[StandardLoadBalancer] Standard load balancer", func() {
 	}}
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		var err error
 		cs, err = utils.CreateKubeClientSet()
 		Expect(err).NotTo(HaveOccurred())

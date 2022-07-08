@@ -54,6 +54,8 @@ var _ = Describe("Private link service", func() {
 	}}
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		if !strings.EqualFold(os.Getenv(utils.LoadBalancerSkuEnv), "standard") {
 			Skip("private link service only works with standard load balancer")
 		}

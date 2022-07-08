@@ -36,6 +36,8 @@ var _ = Describe("Azure Credential Provider", func() {
 	var ns *v1.Namespace
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		cs, err = utils.CreateKubeClientSet()
 		Expect(err).NotTo(HaveOccurred())
 

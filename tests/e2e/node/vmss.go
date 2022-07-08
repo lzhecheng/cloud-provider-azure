@@ -36,6 +36,8 @@ var _ = Describe("Lifecycle of VMSS", func() {
 	)
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		const Basename = "vmss-lifecycle"
 		var err error
 		k8sCli, err = utils.CreateKubeClientSet()

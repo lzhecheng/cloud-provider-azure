@@ -62,6 +62,8 @@ var _ = Describe("Cluster size autoscaler [Feature:Autoscaling][Serial][Slow]", 
 	)
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		var err error
 		By("Create test context")
 		cs, err = utils.CreateKubeClientSet()

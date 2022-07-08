@@ -56,6 +56,8 @@ var _ = Describe("Network security group", func() {
 	}}
 
 	BeforeEach(func() {
+		utils.SkipIfAKSCluster()
+
 		var err error
 		cs, err = utils.CreateKubeClientSet()
 		Expect(err).NotTo(HaveOccurred())
