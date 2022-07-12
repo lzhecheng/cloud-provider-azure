@@ -88,7 +88,7 @@ var _ = Describe("Network security group", FlakeAttempts(3), func() {
 		tc = nil
 	})
 
-	It("should add the rule when expose a service", func() {
+	It("should add the rule when expose a service", Label(utils.TestSuiteLabelNSG), func() {
 		By("Creating a service and expose it")
 		ip := createAndExposeDefaultServiceWithAnnotation(cs, serviceName, ns.Name, labels, map[string]string{}, ports)
 		defer func() {
@@ -142,7 +142,7 @@ var _ = Describe("Network security group", FlakeAttempts(3), func() {
 		Expect(isDeleted).To(BeTrue(), "Fail to automatically delete the rule")
 	})
 
-	It("can set source IP prefixes automatically according to corresponding service tag", func() {
+	It("can set source IP prefixes automatically according to corresponding service tag", Label(utils.TestSuiteLabelNSG), func() {
 		By("Creating service and wait it to expose")
 		annotation := map[string]string{
 			consts.ServiceAnnotationAllowedServiceTag: "AzureCloud",
@@ -180,7 +180,7 @@ var _ = Describe("Network security group", FlakeAttempts(3), func() {
 		Expect(found).To(BeTrue())
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-deny-all-except-load-balancer-source-ranges`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-deny-all-except-load-balancer-source-ranges`", Label(utils.TestSuiteLabelNSG), func() {
 		By("Creating a test service with the deny rule annotation but without `service.Spec.LoadBalancerSourceRanges`")
 		annotation := map[string]string{
 			consts.ServiceAnnotationDenyAllExceptLoadBalancerSourceRanges: "true",
@@ -243,7 +243,7 @@ var _ = Describe("Network security group", FlakeAttempts(3), func() {
 		Expect(found).To(BeTrue())
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-disable-load-balancer-floating-ip`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-disable-load-balancer-floating-ip`", Label(utils.TestSuiteLabelNSG), func() {
 		By("Creating a public IP with tags")
 		ipName := basename + "-public-IP-disable-floating-ip"
 		pip := defaultPublicIPAddress(ipName)

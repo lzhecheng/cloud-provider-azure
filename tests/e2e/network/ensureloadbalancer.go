@@ -103,7 +103,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		tc = nil
 	})
 
-	It("should support mixed protocol services", func() {
+	It("should support mixed protocol services", Label(utils.TestSuiteLabelLB), func() {
 		utils.Logf("Updating deployment %s", testDeploymentName)
 		tcpPort := int32(serverPort)
 		udpPort := int32(testingPort)
@@ -151,7 +151,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		Expect(foundUDP).To(BeTrue())
 	})
 
-	It("should support BYO public IP", func() {
+	It("should support BYO public IP", Label(utils.TestSuiteLabelLB), func() {
 		By("creating a public IP with tags")
 		ipName := basename + "-public-IP" + string(uuid.NewUUID())[0:4]
 		pip := defaultPublicIPAddress(ipName)
@@ -191,7 +191,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 	})
 
 	// Public w/o IP -> Public w/ IP
-	It("should support assigning to specific IP when updating public service", func() {
+	It("should support assigning to specific IP when updating public service", Label(utils.TestSuiteLabelLB), func() {
 		ipName := basename + "-public-none-IP" + string(uuid.NewUUID())[0:4]
 
 		service := utils.CreateLoadBalancerServiceManifest(testServiceName, serviceAnnotationLoadBalancerInternalFalse, labels, ns.Name, ports)
@@ -232,7 +232,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 	})
 
 	// Internal w/ IP -> Internal w/ IP
-	It("should support updating internal IP when updating internal service", func() {
+	It("should support updating internal IP when updating internal service", Label(utils.TestSuiteLabelLB), func() {
 		ip1, err := utils.SelectAvailablePrivateIP(tc)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -275,7 +275,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 	})
 
 	// internal w/o IP -> public w/ IP
-	It("should support updating an internal service to a public service with assigned IP", func() {
+	It("should support updating an internal service to a public service with assigned IP", Label(utils.TestSuiteLabelLB), func() {
 		ipName := basename + "-internal-none-public-IP" + string(uuid.NewUUID())[0:4]
 
 		service := utils.CreateLoadBalancerServiceManifest(testServiceName, serviceAnnotationLoadBalancerInternalTrue, labels, ns.Name, ports)
@@ -323,7 +323,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 	// This test is to replace an upstream k/k one because there's a bug:
 	// https://github.com/kubernetes/kubernetes/blob/373c08e0c7873a76cecde1d6d714cc2ff7af0c9a/test/e2e/network/loadbalancer.go#L574
 	// https://github.com/kubernetes/kubernetes/pull/109413
-	It("should support updating an internal Service to a public one", func() {
+	It("should support updating an internal Service to a public one", Label(utils.TestSuiteLabelLB), func() {
 		By("Creating an internal Service")
 		service := utils.CreateLoadBalancerServiceManifest(testServiceName, serviceAnnotationLoadBalancerInternalTrue, labels, ns.Name, ports)
 		_, err := cs.CoreV1().Services(ns.Name).Create(context.TODO(), service, metav1.CreateOptions{})
@@ -376,7 +376,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 	// This test is to replace an upstream k/k one because there's a bug:
 	// https://github.com/kubernetes/kubernetes/blob/373c08e0c7873a76cecde1d6d714cc2ff7af0c9a/test/e2e/network/loadbalancer.go#L574
 	// https://github.com/kubernetes/kubernetes/pull/109413
-	It("should support updating a public Service to an internal one with specific IP", func() {
+	It("should support updating a public Service to an internal one with specific IP", Label(utils.TestSuiteLabelLB), func() {
 		service := utils.CreateLoadBalancerServiceManifest(testServiceName, serviceAnnotationLoadBalancerInternalFalse, labels, ns.Name, ports)
 		_, err := cs.CoreV1().Services(ns.Name).Create(context.TODO(), service, metav1.CreateOptions{})
 		defer func() {
@@ -470,7 +470,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		Expect(err).To(Equal(wait.ErrWaitTimeout))
 	})
 
-	It("should support multiple external services sharing one preset public IP address", func() {
+	It("should support multiple external services sharing one preset public IP address", Label(utils.TestSuiteLabelLB), func() {
 		ipName := fmt.Sprintf("%s-public-remain-%s", basename, string(uuid.NewUUID())[0:4])
 		pip, err := utils.WaitCreatePIP(tc, ipName, tc.GetResourceGroup(), defaultPublicIPAddress(ipName))
 		defer func() {
@@ -524,7 +524,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		}
 	})
 
-	It("should support multiple external services sharing one newly created public IP address", func() {
+	It("should support multiple external services sharing one newly created public IP address", Label(utils.TestSuiteLabelLB), func() {
 		serviceCount := 2
 		sharedIP := ""
 		serviceNames := []string{}
@@ -613,7 +613,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should support multiple internal services sharing one IP address", func() {
+	It("should support multiple internal services sharing one IP address", Label(utils.TestSuiteLabelLB), func() {
 		sharedIP := ""
 		serviceNames := []string{}
 		for i := 0; i < 2; i++ {
@@ -665,7 +665,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		}
 	})
 
-	It("should support node label `node.kubernetes.io/exclude-from-external-load-balancers`", func() {
+	It("should support node label `node.kubernetes.io/exclude-from-external-load-balancers`", Label(utils.TestSuiteLabelLB), func() {
 		label := "node.kubernetes.io/exclude-from-external-load-balancers"
 		By("Checking the number of the node pools")
 		nodes, err := utils.GetAgentNodes(cs)
@@ -704,7 +704,7 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should support disabling floating IP in load balancer rule with kubernetes service annotations", func() {
+	It("should support disabling floating IP in load balancer rule with kubernetes service annotations", Label(utils.TestSuiteLabelLB), func() {
 		By("creating a public IP with tags")
 		ipName := basename + "-public-IP" + string(uuid.NewUUID())[0:4]
 		pip := defaultPublicIPAddress(ipName)

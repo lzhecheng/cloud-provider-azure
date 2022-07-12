@@ -55,7 +55,7 @@ var _ = Describe("Azure Credential Provider", func() {
 		tc = nil
 	})
 
-	It("should be able to pull private images from acr without docker secrets set explicitly", func() {
+	It("should be able to pull private images from acr without docker secrets set explicitly", Label(utils.TestSuiteLabelCredential), func() {
 		registry, err := tc.CreateContainerRegistry()
 		Expect(err).NotTo(HaveOccurred())
 

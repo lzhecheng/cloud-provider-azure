@@ -73,7 +73,7 @@ var _ = Describe("Azure node resources", func() {
 		ns = nil
 	})
 
-	It("should set node provider id correctly", func() {
+	It("should set node provider id correctly", Label(utils.TestSuiteLabelNode), func() {
 		utils.Logf("getting meta info of test environment")
 		authConfig := tc.GetAuthConfig()
 		subscriptionID := authConfig.SubscriptionID
@@ -128,7 +128,7 @@ var _ = Describe("Azure node resources", func() {
 		}
 	})
 
-	It("should set correct private IP address for every node", func() {
+	It("should set correct private IP address for every node", Label(utils.TestSuiteLabelNode), func() {
 		utils.Logf("getting all NICs of availabilitySet VMs")
 		vmasNICs, err := utils.ListNICs(tc, tc.GetResourceGroup())
 		Expect(err).NotTo(HaveOccurred())
@@ -228,7 +228,7 @@ var _ = Describe("Azure node resources", func() {
 		}
 	})
 
-	It("should set route table correctly when the cluster is enabled by kubenet", Label(utils.TestSuiteLabelKubenet), func() {
+	It("should set route table correctly when the cluster is enabled by kubenet", Label(utils.TestSuiteLabelKubenet, utils.TestSuiteLabelNode), func() {
 		utils.Logf("getting route table")
 		routeTables, err := utils.ListRouteTables(tc)
 		Expect(err).NotTo(HaveOccurred())

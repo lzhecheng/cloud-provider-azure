@@ -130,7 +130,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		tc = nil
 	})
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-dns-label-name'", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-dns-label-name'", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Create service")
 		serviceDomainNamePrefix := serviceName + string(uuid.NewUUID())
 
@@ -174,7 +174,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(code).To(Equal(nginxStatusCode), "Fail to get response from the domain name")
 	})
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-internal'", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-internal'", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		annotation := map[string]string{
 			consts.ServiceAnnotationLoadBalancerInternal: "true",
 		}
@@ -188,7 +188,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		}()
 	})
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-internal-subnet'", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-internal-subnet'", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("creating environment")
 		// This subnetName verifies a bug fix in an issue: https://github.com/kubernetes-sigs/cloud-provider-azure/issues/1443
 		subnetName := "a--------------------------------------------------z"
@@ -238,7 +238,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(ret).To(BeTrue(), "external ip %s is not in the target subnet %s", ip, newSubnetCIDR)
 	})
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-tcp-idle-timeout'", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-tcp-idle-timeout'", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		annotation := map[string]string{
 			consts.ServiceAnnotationLoadBalancerIdleTimeout: "5",
 		}
@@ -278,7 +278,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 	// 	Expect(len(existingProtocols)).To(Equal(2))
 	// })
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-resource-group'", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-resource-group'", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("creating a test resource group")
 		rg, cleanup := utils.CreateTestResourceGroup(tc)
 		defer cleanup(to.String(rg.Name))
@@ -314,7 +314,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(lb).NotTo(BeNil())
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-shared-securityrule`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-shared-securityrule`", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Exposing two services with shared security rule")
 		annotation := map[string]string{
 			consts.ServiceAnnotationSharedSecurityRule: "true",
@@ -343,7 +343,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(validateSharedSecurityRuleExists(nsgs, ipList, port)).To(BeTrue(), "Security rule for service %s not exists", serviceName)
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-pip-tags`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-pip-tags`", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Creating a service with custom tags")
 		annotation := map[string]string{
 			consts.ServiceAnnotationAzurePIPTags: "a=b,c= d,e =, =f",
@@ -398,7 +398,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-pip-name`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-pip-name`", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Creating two test pips")
 		pipName1 := "pip1"
 		pip1, err := utils.WaitCreatePIP(tc, pipName1, tc.GetResourceGroup(), defaultPublicIPAddress(pipName1))
@@ -447,7 +447,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should support service annotation `service.beta.kubernetes.io/azure-pip-prefix-id`", func() {
+	It("should support service annotation `service.beta.kubernetes.io/azure-pip-prefix-id`", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		if skuEnv := os.Getenv(utils.LoadBalancerSkuEnv); skuEnv != "" {
 			if !strings.EqualFold(skuEnv, string(network.PublicIPAddressSkuNameStandard)) {
 				Skip("pip-prefix-id only work with Standard Load Balancer")
@@ -526,7 +526,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		}
 	})
 
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-health-probe-num-of-probe' and port specific configs", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-health-probe-num-of-probe' and port specific configs", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Creating a service with health probe annotations")
 		annotation := map[string]string{
 			consts.ServiceAnnotationLoadBalancerHealthProbeNumOfProbe:                                   "5",
@@ -560,7 +560,7 @@ var _ = Describe("Service with annotation", FlakeAttempts(3), func() {
 		}
 		Expect(*numberOfProbes).To(Equal(int32(3)))
 	})
-	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-health-probe-protocol' and port specific configs", func() {
+	It("should support service annotation 'service.beta.kubernetes.io/azure-load-balancer-health-probe-protocol' and port specific configs", Label(utils.TestSuiteLabelServiceAnnotation), func() {
 		By("Creating a service with health probe annotations")
 		annotation := map[string]string{
 			consts.ServiceAnnotationLoadBalancerHealthProbeProtocol:    "Http",
@@ -758,7 +758,7 @@ var _ = Describe("Multi-ports service", func() {
 		tc = nil
 	})
 	Context("When ExternalTrafficPolicy is updated", func() {
-		It("Should not have error occurred", func() {
+		It("Should not have error occurred", Label(utils.TestSuiteLabelMultiPorts), func() {
 			By("Getting the service")
 			annotation := map[string]string{}
 			utils.Logf("Creating service " + serviceName + " in namespace " + ns.Name)
