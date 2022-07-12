@@ -1,6 +1,7 @@
 steps:
   - template: ./docker-login.yml
   - bash: |
+      exit 0
       git show --stat
       export IMAGE_REGISTRY=$(registry.url)
       IMAGE_NAME="azure-cloud-controller-manager"

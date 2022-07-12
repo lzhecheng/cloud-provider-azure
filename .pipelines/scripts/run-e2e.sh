@@ -18,69 +18,74 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+export GOPATH="/home/vsts/go"
+export PATH="${PATH}:${GOPATH}"
+echo $PATH
+echo $GOPATH
+
 REPO_ROOT=$(dirname "${BASH_SOURCE[0]}")/../..
-export PATH="$PATH:$GOPATH/bin"
+export PATH="${PATH:-}:${GOPATH:-}/bin"
 export KUBERNETES_VERSION="1.24.0"
 export AKS_CLUSTER_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourcegroups/${RESOURCE_GROUP}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER_NAME}"
 
 az extension add -n aks-preview
 az login --service-principal -u "${AZURE_CLIENT_ID}" -p "${AZURE_CLIENT_SECRET}" --tenant "${AZURE_TENANT_ID}"
 
-get_random_location() {
-  local LOCATIONS=("eastus" "eastus2" "southcentralus" "westus3" "australiaeast")
-  echo "${LOCATIONS[${RANDOM} % ${#LOCATIONS[@]}]}"
-}
+# get_random_location() {
+#   local LOCATIONS=("eastus" "eastus2" "southcentralus" "westus3" "australiaeast")
+#   echo "${LOCATIONS[${RANDOM} % ${#LOCATIONS[@]}]}"
+# }
 
 cleanup() {
   kubectl get node -owide
   echo "gc the aks cluster"
-  az aks delete --name "${CLUSTER_NAME}" --resource-group "${RESOURCE_GROUP}" -y || true
+  # az aks delete --name "${CLUSTER_NAME}" --resource-group "${RESOURCE_GROUP}" -y || true
   az group delete --resource-group "${RESOURCE_GROUP}" -y || true
 }
 trap cleanup EXIT
 
-export AZURE_LOCATION="$(get_random_location)"
+# export AZURE_LOCATION="$(get_random_location)"
 
-echo "Setting up customconfiguration.json"
-IMAGE_TAG="$(git rev-parse --short=7 HEAD)"
-CUSTOM_CONFIG_PATH=".pipelines/templates/customconfiguration.json"
-CCM_NAME="${IMAGE_REGISTRY}/azure-cloud-controller-manager:${IMAGE_TAG}"
-CNM_NAME="${IMAGE_REGISTRY}/azure-cloud-node-manager:${IMAGE_TAG}-linux-amd64"
-sed -i "s|CUSTOM_CCM_IMAGE|${CCM_NAME}|g" "${CUSTOM_CONFIG_PATH}"
-sed -i "s|CUSTOM_CNM_IMAGE|${CNM_NAME}|g" "${CUSTOM_CONFIG_PATH}"
-export CUSTOM_CONFIG="$(base64 -w 0 ${CUSTOM_CONFIG_PATH})"
-export TOKEN=$(az account get-access-token -o json | jq -r '.accessToken')
+# echo "Setting up customconfiguration.json"
+# IMAGE_TAG="55aa47b"
+# CUSTOM_CONFIG_PATH=".pipelines/templates/customconfiguration.json"
+# CCM_NAME="${IMAGE_REGISTRY}/azure-cloud-controller-manager:${IMAGE_TAG}"
+# CNM_NAME="${IMAGE_REGISTRY}/azure-cloud-node-manager:${IMAGE_TAG}-linux-amd64"
+# sed -i "s|CUSTOM_CCM_IMAGE|${CCM_NAME}|g" "${CUSTOM_CONFIG_PATH}"
+# sed -i "s|CUSTOM_CNM_IMAGE|${CNM_NAME}|g" "${CUSTOM_CONFIG_PATH}"
+# export CUSTOM_CONFIG="$(base64 -w 0 ${CUSTOM_CONFIG_PATH})"
+# export TOKEN=$(az account get-access-token -o json | jq -r '.accessToken')
 
-CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/basic-lb.json"
-if [[ "${CLUSTER_TYPE}" == "autoscaling" ]]; then
-  CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/autoscaling.json"
-elif [[ "${CLUSTER_TYPE}" == "autoscaling-multipool" ]]; then
-  CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/autoscaling-multipool.json"
-fi
+# CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/basic-lb.json"
+# if [[ "${CLUSTER_TYPE}" == "autoscaling" ]]; then
+#   CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/autoscaling.json"
+# elif [[ "${CLUSTER_TYPE}" == "autoscaling-multipool" ]]; then
+#   CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/autoscaling-multipool.json"
+# fi
 
-CLUSTER_CONFIG_KEYS=("AKS_CLUSTER_ID" "CLUSTER_NAME" "AZURE_LOCATION" "KUBERNETES_VERSION" "AZURE_CLIENT_ID" "AZURE_CLIENT_SECRET" "CUSTOM_CONFIG")
-CLUSTER_CONFIG_VALS=("${AKS_CLUSTER_ID}" "${CLUSTER_NAME}" "${AZURE_LOCATION}" "${KUBERNETES_VERSION}" "${AZURE_CLIENT_ID}" "${AZURE_CLIENT_SECRET}" "${CUSTOM_CONFIG}")
-for i in "${!CLUSTER_CONFIG_KEYS[@]}";do
-  sed -i "s|${CLUSTER_CONFIG_KEYS[$i]}|${CLUSTER_CONFIG_VALS[$i]}|g" "${CLUSTER_CONFIG_PATH}"
-done
+# CLUSTER_CONFIG_KEYS=("AKS_CLUSTER_ID" "CLUSTER_NAME" "AZURE_LOCATION" "KUBERNETES_VERSION" "AZURE_CLIENT_ID" "AZURE_CLIENT_SECRET" "CUSTOM_CONFIG")
+# CLUSTER_CONFIG_VALS=("${AKS_CLUSTER_ID}" "${CLUSTER_NAME}" "${AZURE_LOCATION}" "${KUBERNETES_VERSION}" "${AZURE_CLIENT_ID}" "${AZURE_CLIENT_SECRET}" "${CUSTOM_CONFIG}")
+# for i in "${!CLUSTER_CONFIG_KEYS[@]}";do
+#   sed -i "s|${CLUSTER_CONFIG_KEYS[$i]}|${CLUSTER_CONFIG_VALS[$i]}|g" "${CLUSTER_CONFIG_PATH}"
+# done
 
-echo "Creating an AKS cluster in resource group ${RESOURCE_GROUP}"
-CREATION_DATE="$(date +%s)"
-az group create --name "${RESOURCE_GROUP}" -l "${AZURE_LOCATION}" --tags "creation_date=${CREATION_DATE} usage=aks-cluster-e2e"
-az group wait --created --resource-group "${RESOURCE_GROUP}"
-curl -i -X PUT -k -H "Authorization: Bearer ${TOKEN}" \
-    -H "Content-Type: application/json" \
-    -H "AKSHTTPCustomFeatures: Microsoft.ContainerService/EnableCloudControllerManager" \
-    "https://management.azure.com${AKS_CLUSTER_ID}?api-version=2022-01-01" \
-    -d "$(cat ${CLUSTER_CONFIG_PATH})"
+# echo "Creating an AKS cluster in resource group ${RESOURCE_GROUP}"
+# CREATION_DATE="$(date +%s)"
+# az group create --name "${RESOURCE_GROUP}" -l "${AZURE_LOCATION}" --tags "creation_date=${CREATION_DATE} usage=aks-cluster-e2e"
+# az group wait --created --resource-group "${RESOURCE_GROUP}"
+# curl -i -X PUT -k -H "Authorization: Bearer ${TOKEN}" \
+#     -H "Content-Type: application/json" \
+#     -H "AKSHTTPCustomFeatures: Microsoft.ContainerService/EnableCloudControllerManager" \
+#     "https://management.azure.com${AKS_CLUSTER_ID}?api-version=2022-01-01" \
+#     -d "$(cat ${CLUSTER_CONFIG_PATH})"
 
-echo ""
-echo "Waiting until cluster creation finishes"
-az aks wait -g "${RESOURCE_GROUP}" -n "${CLUSTER_NAME}" --created --interval 60 --timeout 1800
-az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" -f "${REPO_ROOT}/aks-cluster.kubeconfig"
-export KUBECONFIG="${REPO_ROOT}/aks-cluster.kubeconfig"
-kubectl wait --for=condition=Ready node --all --timeout=5m
-kubectl get node -owide
+# echo ""
+# echo "Waiting until cluster creation finishes"
+# az aks wait -g "${RESOURCE_GROUP}" -n "${CLUSTER_NAME}" --created --interval 60 --timeout 1800
+# az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" -f "${REPO_ROOT}/aks-cluster.kubeconfig"
+# export KUBECONFIG="${REPO_ROOT}/aks-cluster.kubeconfig"
+# kubectl wait --for=condition=Ready node --all --timeout=5m
+# kubectl get node -owide
 
 echo "Running e2e"
 export E2E_ON_AKS_CLUSTER=true

@@ -1,7 +1,4 @@
-schedules:
-- cron: "0 0 * * *"
-  displayName: Daily GC
-  always: true
+trigger: none
 
 stages:
   - stage: gc_stage

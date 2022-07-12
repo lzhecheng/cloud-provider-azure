@@ -33,4 +33,6 @@ else
   fi
 fi
 
+echo $PATH
+echo $GOPATH
 ginkgo version
