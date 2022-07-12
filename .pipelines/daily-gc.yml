@@ -11,6 +11,9 @@ stages:
       timeoutInMinutes: 30
       steps:
         - bash: |
+            go env
+            ls $PATH
+            ls $HOME
             export AZURE_SUBSCRIPTION_ID=$(az.subscription_id)
             export AZURE_TENANT_ID=$(az.tenant_id)
             export AZURE_CLIENT_ID=$(sp.client_id)
