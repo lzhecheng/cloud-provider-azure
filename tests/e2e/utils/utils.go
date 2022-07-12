@@ -154,7 +154,7 @@ func DeleteNamespace(cs clientset.Interface, namespace string) error {
 // IsRetryableAPIError will judge whether an error retryable or not
 func IsRetryableAPIError(err error) bool {
 	// These errors may indicate a transient error that we can retry in tests.
-	if apierrs.IsInternalError(err) || apierrs.IsTimeout(err) || apierrs.IsServerTimeout(err) ||
+	if apierrs.IsInternalError(err) || apierrs.IsTimeout(err) || apierrs.IsServerTimeout(err) || isNotFound(err) ||
 		apierrs.IsTooManyRequests(err) || utilnet.IsProbableEOF(err) || utilnet.IsConnectionReset(err) {
 		return true
 	}
@@ -163,6 +163,10 @@ func IsRetryableAPIError(err error) bool {
 		return true
 	}
 	return false
+}
+
+func isNotFound(err error) bool {
+	return strings.Contains(err.Error(), "StatusCode=404")
 }
 
 // ExtractDNSPrefix obtains the cluster DNS prefix

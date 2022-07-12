@@ -159,7 +159,13 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 			"foo": to.StringPtr("bar"),
 		}
 		pip.Tags = expectedTags
-		pip, err := utils.WaitCreatePIP(tc, ipName, tc.GetResourceGroup(), pip)
+		rgName := tc.GetResourceGroup()
+		pip, err := utils.WaitCreatePIP(tc, ipName, rgName, pip)
+		defer func() {
+			By("cleaning up")
+			err := utils.DeletePIPWithRetry(tc, ipName, rgName)
+			Expect(err).NotTo(HaveOccurred())
+		}()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(pip.Tags).To(Equal(expectedTags))
 		targetIP := to.String(pip.IPAddress)
@@ -184,10 +190,6 @@ var _ = Describe("Ensure LoadBalancer", FlakeAttempts(3), func() {
 
 		By("test if the tags are changed")
 		Expect(pip.Tags).To(Equal(expectedTags))
-
-		By("cleaning up")
-		err = utils.DeletePIPWithRetry(tc, ipName, "")
-		Expect(err).NotTo(HaveOccurred())
 	})
 
 	// Public w/o IP -> Public w/ IP
