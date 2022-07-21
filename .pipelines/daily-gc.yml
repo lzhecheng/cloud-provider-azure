@@ -2,6 +2,14 @@ schedules:
 - cron: "0 0 * * *"
   displayName: Daily GC
   always: true
+  branches:
+    include:
+    - main
+
+variables:
+- group: aks-ci
+- name: DisableDockerDetector
+  value: true
 
 stages:
   - stage: gc_stage
