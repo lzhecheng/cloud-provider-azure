@@ -211,6 +211,11 @@ const (
 	// to specify what subnet it is exposed on
 	ServiceAnnotationLoadBalancerInternalSubnet = "service.beta.kubernetes.io/azure-load-balancer-internal-subnet"
 
+	// ServiceAnnotationLoadBalancerIP is the annotation used on the service
+	// to specify the IPs of Azure load balancer
+	ServiceAnnotationLoadBalancerIPv4 = "service.beta.kubernetes.io/azure-load-balancer-ipv4"
+	ServiceAnnotationLoadBalancerIPv6 = "service.beta.kubernetes.io/azure-load-balancer-ipv6"
+
 	// ServiceAnnotationLoadBalancerMode is the annotation used on the service to specify
 	// which load balancer should be associated with the service. This is valid when using the basic
 	// load balancer or turn on the multiple standard load balancers mode, or it would be ignored.
@@ -242,10 +247,14 @@ const (
 	ServiceAnnotationLoadBalancerResourceGroup = "service.beta.kubernetes.io/azure-load-balancer-resource-group"
 
 	// ServiceAnnotationPIPName specifies the pip that will be applied to load balancer
-	ServiceAnnotationPIPName = "service.beta.kubernetes.io/azure-pip-name"
+	ServiceAnnotationPIPName     = "service.beta.kubernetes.io/azure-pip-name"
+	ServiceAnnotationPIPNameIPv4 = "service.beta.kubernetes.io/azure-pip-name-ipv4"
+	ServiceAnnotationPIPNameIPv6 = "service.beta.kubernetes.io/azure-pip-name-ipv6"
 
 	// ServiceAnnotationPIPPrefixID specifies the pip prefix that will be applied to the load balancer.
-	ServiceAnnotationPIPPrefixID = "service.beta.kubernetes.io/azure-pip-prefix-id"
+	ServiceAnnotationPIPPrefixID     = "service.beta.kubernetes.io/azure-pip-prefix-id"
+	ServiceAnnotationPIPPrefixIDIPv4 = "service.beta.kubernetes.io/azure-pip-prefix-id-ipv4"
+	ServiceAnnotationPIPPrefixIDIPv6 = "service.beta.kubernetes.io/azure-pip-prefix-id-ipv6"
 
 	// ServiceAnnotationIPTagsForPublicIP specifies the iptags used when dynamically creating a public ip
 	ServiceAnnotationIPTagsForPublicIP = "service.beta.kubernetes.io/azure-pip-ip-tags"

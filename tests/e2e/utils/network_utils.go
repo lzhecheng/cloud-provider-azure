@@ -177,6 +177,7 @@ func (azureTestClient *AzureTestClient) GetClusterSecurityGroups() (ret []aznetw
 
 // CreateLoadBalancerServiceManifest return the specific service to be created
 func CreateLoadBalancerServiceManifest(name string, annotation map[string]string, labels map[string]string, namespace string, ports []v1.ServicePort) *v1.Service {
+	ipFamilyPreferDS := v1.IPFamilyPolicyPreferDualStack
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -184,9 +185,10 @@ func CreateLoadBalancerServiceManifest(name string, annotation map[string]string
 			Annotations: annotation,
 		},
 		Spec: v1.ServiceSpec{
-			Selector: labels,
-			Ports:    ports,
-			Type:     "LoadBalancer",
+			Selector:       labels,
+			Ports:          ports,
+			Type:           "LoadBalancer",
+			IPFamilyPolicy: &ipFamilyPreferDS,
 		},
 	}
 }
@@ -385,7 +387,7 @@ func SelectAvailablePrivateIP(tc *AzureTestClient) (string, error) {
 			return IP, nil
 		}
 	}
-	return "", fmt.Errorf("Find no availabePrivateIP in subnet CIDR %s", subnet)
+	return "", fmt.Errorf("find no availabePrivateIP in subnet CIDR %s", subnet)
 }
 
 // GetPublicIPFromAddress finds public ip according to ip address

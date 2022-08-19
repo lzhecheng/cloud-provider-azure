@@ -1077,7 +1077,21 @@ func updateServiceBalanceIP(service *v1.Service, isInternal bool, ip string) (re
 	if result == nil {
 		return
 	}
-	result.Spec.LoadBalancerIP = ip
+	if ips, ok := result.Annotations[consts.ServiceAnnotationLoadBalancerIPs]; ok {
+		found := false
+		for _, existingIP := range strings.Split(ips, ",") {
+			if existingIP == ip {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result.Annotations[consts.ServiceAnnotationLoadBalancerIPs] += fmt.Sprintf(",%s", ip)
+		}
+	} else {
+		result.Annotations[consts.ServiceAnnotationLoadBalancerIPs] = ip
+	}
+
 	if judgeInternal(*service) == isInternal {
 		return
 	}
