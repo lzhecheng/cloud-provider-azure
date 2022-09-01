@@ -157,6 +157,7 @@ type Config struct {
 	SystemTags string `json:"systemTags,omitempty" yaml:"systemTags,omitempty"`
 	// Sku of Load Balancer and Public IP. Candidate values are: basic and standard.
 	// If not set, it will be default to basic.
+	// TODO: string to a type
 	LoadBalancerSku string `json:"loadBalancerSku,omitempty" yaml:"loadBalancerSku,omitempty"`
 	// LoadBalancerName determines the specific name of the load balancer user want to use, working with
 	// LoadBalancerResourceGroup
@@ -281,6 +282,14 @@ var (
 	_ cloudprovider.PVLabeler    = (*Cloud)(nil)
 )
 
+type IPFamily string
+
+var (
+	IPv4      IPFamily = "IPv4"
+	IPv6      IPFamily = "IPv6"
+	DualStack IPFamily = "DualStack"
+)
+
 // Cloud holds the config and clients
 type Cloud struct {
 	Config
@@ -320,6 +329,7 @@ type Cloud struct {
 
 	// ipv6DualStack allows overriding for unit testing.  It's normally initialized from featuregates
 	ipv6DualStackEnabled bool
+	IPFamily             IPFamily
 	// isSHaredLoadBalancerSynced indicates if the reconcileSharedLoadBalancer has been run
 	isSharedLoadBalancerSynced bool
 	// Lock for access to node caches, includes nodeZones, nodeResourceGroups, and unmanagedNodes.

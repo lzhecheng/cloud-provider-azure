@@ -2735,7 +2735,7 @@ func TestReconcileLoadBalancerRule(t *testing.T) {
 				service.Annotations[consts.BuildHealthProbeAnnotationKeyForPort(firstPort.Port, consts.HealthProbeParamsRequestPath)] = test.probePath
 			}
 			probe, lbrule, err := az.getExpectedLBRules(&service,
-				"frontendIPConfigID", "backendPoolID", "lbname")
+				"frontendIPConfigID", "backendPoolID", "lbname", false) // TODO: consider ds
 
 			if test.expectedErr {
 				assert.Error(t, err)
@@ -2933,6 +2933,187 @@ func getTestLoadBalancer(name, rgName, clusterName, identifier *string, service 
 						IdleTimeoutInMinutes: pointer.Int32(4),
 						Probe: &network.SubResource{
 							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/Microsoft.Network/loadBalancers/testCluster/probes/aservice1-TCP-80"),
+						},
+					},
+				},
+			},
+		},
+	}
+	return lb
+}
+
+func getTestLoadBalancerSingleStack(name, rgName, clusterName, identifier *string, service v1.Service, lbSku string, isIPv6 bool) network.LoadBalancer {
+	suffix := ""
+	bpSuffix := ""
+	if isIPv6 {
+		suffix = v6Suffix
+		bpSuffix = "-IPv6"
+	}
+
+	caser := cases.Title(language.English)
+	lb := network.LoadBalancer{
+		Name: name,
+		Sku: &network.LoadBalancerSku{
+			Name: network.LoadBalancerSkuName(lbSku),
+		},
+		LoadBalancerPropertiesFormat: &network.LoadBalancerPropertiesFormat{
+			FrontendIPConfigurations: &[]network.FrontendIPConfiguration{
+				{
+					Name: pointer.String(*identifier + suffix),
+					ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+						"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/" + *identifier + "-" + suffix),
+					FrontendIPConfigurationPropertiesFormat: &network.FrontendIPConfigurationPropertiesFormat{
+						PublicIPAddress: &network.PublicIPAddress{ID: pointer.String("testCluster-aservice1" + "-" + suffix)},
+					},
+				},
+			},
+			BackendAddressPools: &[]network.BackendAddressPool{
+				{Name: pointer.String(*clusterName + bpSuffix)},
+			},
+			Probes: &[]network.Probe{
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-" + suffix),
+					ProbePropertiesFormat: &network.ProbePropertiesFormat{
+						Port:              pointer.Int32(10080),
+						Protocol:          network.ProbeProtocolTCP,
+						IntervalInSeconds: pointer.Int32(5),
+						NumberOfProbes:    pointer.Int32(2),
+					},
+				},
+			},
+			LoadBalancingRules: &[]network.LoadBalancingRule{
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-" + suffix),
+					LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+						Protocol: network.TransportProtocol(caser.String((strings.ToLower(string(service.Spec.Ports[0].Protocol))))),
+						FrontendIPConfiguration: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/aservice1-" + suffix),
+						},
+						BackendAddressPool: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/backendAddressPools/" + *clusterName + "-" + suffix),
+						},
+						LoadDistribution:     network.LoadDistribution("Default"),
+						FrontendPort:         pointer.Int32(service.Spec.Ports[0].Port),
+						BackendPort:          pointer.Int32(service.Spec.Ports[0].Port),
+						EnableFloatingIP:     pointer.Bool(true),
+						EnableTCPReset:       pointer.Bool(strings.EqualFold(lbSku, "standard")),
+						DisableOutboundSnat:  pointer.Bool(false),
+						IdleTimeoutInMinutes: pointer.Int32(4),
+						Probe: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/Microsoft.Network/loadBalancers/testCluster/probes/aservice1-TCP-80-" + suffix),
+						},
+					},
+				},
+			},
+		},
+	}
+	return lb
+}
+
+func getTestLoadBalancerDualStack(name, rgName, clusterName, identifier *string, service v1.Service, lbSku string) network.LoadBalancer {
+	caser := cases.Title(language.English)
+	lb := network.LoadBalancer{
+		Name: name,
+		Sku: &network.LoadBalancerSku{
+			Name: network.LoadBalancerSkuName(lbSku),
+		},
+		LoadBalancerPropertiesFormat: &network.LoadBalancerPropertiesFormat{
+			FrontendIPConfigurations: &[]network.FrontendIPConfiguration{
+				{
+					Name: pointer.String(*identifier + "-IPv4"),
+					ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+						"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/" + *identifier + "-IPv4"),
+					FrontendIPConfigurationPropertiesFormat: &network.FrontendIPConfigurationPropertiesFormat{
+						PublicIPAddress: &network.PublicIPAddress{ID: pointer.String("testCluster-aservice1-IPv4")},
+					},
+				},
+				{
+					Name: pointer.String(*identifier + "-IPv6"),
+					ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+						"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/" + *identifier + "-IPv6"),
+					FrontendIPConfigurationPropertiesFormat: &network.FrontendIPConfigurationPropertiesFormat{
+						PublicIPAddress: &network.PublicIPAddress{ID: pointer.String("testCluster-aservice1-IPv6")},
+					},
+				},
+			},
+			BackendAddressPools: &[]network.BackendAddressPool{
+				{Name: clusterName},
+				{Name: pointer.String(*clusterName + "-IPv6")},
+			},
+			Probes: &[]network.Probe{
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-IPv4"),
+					ProbePropertiesFormat: &network.ProbePropertiesFormat{
+						Port:              pointer.Int32(10080),
+						Protocol:          network.ProbeProtocolTCP,
+						IntervalInSeconds: pointer.Int32(5),
+						NumberOfProbes:    pointer.Int32(2),
+					},
+				},
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-IPv6"),
+					ProbePropertiesFormat: &network.ProbePropertiesFormat{
+						Port:              pointer.Int32(10080),
+						Protocol:          network.ProbeProtocolTCP,
+						IntervalInSeconds: pointer.Int32(5),
+						NumberOfProbes:    pointer.Int32(2),
+					},
+				},
+			},
+			LoadBalancingRules: &[]network.LoadBalancingRule{
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-IPv4"),
+					LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+						Protocol: network.TransportProtocol(caser.String((strings.ToLower(string(service.Spec.Ports[0].Protocol))))),
+						FrontendIPConfiguration: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/aservice1-IPv4"),
+						},
+						BackendAddressPool: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/backendAddressPools/" + *clusterName + "-IPv4"),
+						},
+						LoadDistribution:     network.LoadDistribution("Default"),
+						FrontendPort:         pointer.Int32(service.Spec.Ports[0].Port),
+						BackendPort:          pointer.Int32(service.Spec.Ports[0].Port),
+						EnableFloatingIP:     pointer.Bool(true),
+						EnableTCPReset:       pointer.Bool(strings.EqualFold(lbSku, "standard")),
+						DisableOutboundSnat:  pointer.Bool(false),
+						IdleTimeoutInMinutes: pointer.Int32(4),
+						Probe: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/Microsoft.Network/loadBalancers/testCluster/probes/aservice1-TCP-80-IPv4"),
+						},
+					},
+				},
+				{
+					Name: pointer.String(*identifier + "-" + string(service.Spec.Ports[0].Protocol) +
+						"-" + strconv.Itoa(int(service.Spec.Ports[0].Port)) + "-IPv6"),
+					LoadBalancingRulePropertiesFormat: &network.LoadBalancingRulePropertiesFormat{
+						Protocol: network.TransportProtocol(caser.String((strings.ToLower(string(service.Spec.Ports[0].Protocol))))),
+						FrontendIPConfiguration: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/frontendIPConfigurations/aservice1-IPv6"),
+						},
+						BackendAddressPool: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/" +
+								"Microsoft.Network/loadBalancers/" + *name + "/backendAddressPools/" + *clusterName + "-IPv6"),
+						},
+						LoadDistribution:     network.LoadDistribution("Default"),
+						FrontendPort:         pointer.Int32(service.Spec.Ports[0].Port),
+						BackendPort:          pointer.Int32(service.Spec.Ports[0].Port),
+						EnableFloatingIP:     pointer.Bool(true),
+						EnableTCPReset:       pointer.Bool(strings.EqualFold(lbSku, "standard")),
+						DisableOutboundSnat:  pointer.Bool(false),
+						IdleTimeoutInMinutes: pointer.Int32(4),
+						Probe: &network.SubResource{
+							ID: pointer.String("/subscriptions/subscription/resourceGroups/" + *rgName + "/providers/Microsoft.Network/loadBalancers/testCluster/probes/aservice1-TCP-80-IPv6"),
 						},
 					},
 				},
@@ -3502,26 +3683,27 @@ func TestGetServiceLoadBalancerStatus(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
-			status, _, err := az.getServiceLoadBalancerStatus(test.service, test.lb, nil)
+			status, _, _, err := az.getServiceLoadBalancerStatus(test.service, test.lb, nil)
 			assert.Equal(t, test.expectedStatus, status)
 			assert.Equal(t, test.expectedError, err != nil)
 		})
 	}
 }
 
-func TestReconcileSecurityGroup(t *testing.T) {
+func TestReconcileSecurityGroupCommon(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testCases := []struct {
 		desc          string
-		lbIP          *string
+		lbIPs         *[]string
 		lbName        *string
 		service       v1.Service
 		existingSgs   map[string]network.SecurityGroup
 		expectedSg    *network.SecurityGroup
 		wantLb        bool
 		expectedError bool
+		ipFamily      IPFamily
 	}{
 		{
 			desc: "reconcileSecurityGroup shall report error if the sg is shared and no ports in service",
@@ -3540,7 +3722,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			desc:          "reconcileSecurityGroup shall report error if wantLb is true and lbIP is nil",
+			desc:          "reconcileSecurityGroup shall report error if wantLb is true and lbIPs is nil",
 			service:       getTestService("test1", v1.ProtocolTCP, nil, false, 80),
 			wantLb:        true,
 			existingSgs:   map[string]network.SecurityGroup{"nsg": {}},
@@ -3553,7 +3735,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 			expectedSg:  &network.SecurityGroup{},
 		},
 		{
-			desc:    "reconcileSecurityGroup shall delete unwanted sg if wantLb is false and lbIP is nil",
+			desc:    "reconcileSecurityGroup shall delete unwanted sg if wantLb is false and lbIPs is nil",
 			service: getTestService("test1", v1.ProtocolTCP, nil, false, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name: pointer.String("nsg"),
@@ -3598,14 +3780,14 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			}},
-			lbIP:   pointer.String("1.1.1.1"),
+			lbIPs:  &[]string{"1.1.1.1", "fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv4"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                 network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:          pointer.String("*"),
@@ -3617,9 +3799,23 @@ func TestReconcileSecurityGroup(t *testing.T) {
 								Direction:                network.SecurityRuleDirection("Inbound"),
 							},
 						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("fd00::eef0"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(501),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
 					},
 				},
 			},
+			ipFamily: DualStack,
 		},
 		{
 			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix for IPv6",
@@ -3628,14 +3824,14 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("fd00::eef0"),
+			lbIPs:  &[]string{"fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                 network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:          pointer.String("*"),
@@ -3650,22 +3846,67 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			},
+			ipFamily: IPv6,
 		},
 		{
-			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix with additional public IPs",
-			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAdditionalPublicIPs: "2.3.4.5"}, true, 80),
+			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix for Dual-stack",
+			service: getTestService("test1", v1.ProtocolTCP, nil, true, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.1.1.1", "fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv4"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("1.1.1.1"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(500),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("fd00::eef0"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(501),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
+					},
+				},
+			},
+			ipFamily: DualStack,
+		},
+		{
+			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix with additional public IPs",
+			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAdditionalPublicIPs: "2.3.4.5,fd00::eef1"}, true, 80),
+			existingSgs: map[string]network.SecurityGroup{"nsg": {
+				Name:                          pointer.String("nsg"),
+				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
+			}},
+			lbIPs:  &[]string{"1.2.3.4", "fd00::eef0"},
+			wantLb: true,
+			expectedSg: &network.SecurityGroup{
+				Name: pointer.String("nsg"),
+				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
+					SecurityRules: &[]network.SecurityRule{
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv4"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                   network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:            pointer.String("*"),
@@ -3677,15 +3918,29 @@ func TestReconcileSecurityGroup(t *testing.T) {
 								Direction:                  network.SecurityRuleDirection("Inbound"),
 							},
 						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                   network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:            pointer.String("*"),
+								DestinationPortRange:       pointer.String("80"),
+								SourceAddressPrefix:        pointer.String("Internet"),
+								DestinationAddressPrefixes: &([]string{"fd00::eef0", "fd00::eef1"}),
+								Access:                     network.SecurityRuleAccess("Allow"),
+								Priority:                   pointer.Int32(501),
+								Direction:                  network.SecurityRuleDirection("Inbound"),
+							},
+						},
 					},
 				},
 			},
+			ipFamily: DualStack,
 		},
 		{
 			desc:    "reconcileSecurityGroup shall not create unwanted security rules if there is service tags",
 			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAllowedServiceTag: "tag"}, true, 80),
 			wantLb:  true,
-			lbIP:    pointer.String("1.1.1.1"),
+			lbIPs:   &[]string{"1.1.1.1"},
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
@@ -3707,7 +3962,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-tag"),
+							Name: pointer.String("atest1-TCP-80-tag-IPv4"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                 network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:          pointer.String("*"),
@@ -3730,14 +3985,14 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("shared-TCP-80-Internet"),
+							Name: pointer.String("shared-TCP-80-Internet-IPv4"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                   network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:            pointer.String("*"),
@@ -3776,7 +4031,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			wantLb: false,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -3792,7 +4047,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			lbName: pointer.String("lb"),
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
@@ -3800,7 +4055,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv4"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                   network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:            pointer.String("*"),
@@ -3818,12 +4073,12 @@ func TestReconcileSecurityGroup(t *testing.T) {
 		},
 		{
 			desc:    "reconcileSecurityGroup shall create sgs with only IPv6 destination addresses for IPv6 services with floating IP disabled",
-			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationDisableLoadBalancerFloatingIP: "true"}, false, 80),
+			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationDisableLoadBalancerFloatingIP: "true"}, true, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1234::5"),
+			lbIPs:  &[]string{"1234::5"},
 			lbName: pointer.String("lb"),
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
@@ -3831,7 +4086,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                   network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:            pointer.String("*"),
@@ -3846,12 +4101,16 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			},
+			ipFamily: IPv6,
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
 			az := GetTestCloud(ctrl)
+			if test.ipFamily != "" {
+				az.IPFamily = test.ipFamily
+			}
 			mockSGsClient := az.SecurityGroupsClient.(*mocksecuritygroupclient.MockInterface)
 			mockSGsClient.EXPECT().CreateOrUpdate(gomock.Any(), "rg", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			if len(test.existingSgs) == 0 {
@@ -3869,7 +4128,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				mockLBClient.EXPECT().Get(gomock.Any(), "rg", *test.lbName, gomock.Any()).Return(network.LoadBalancer{}, nil)
 			}
 			service := test.service
-			sg, err := az.reconcileSecurityGroup("testCluster", &service, test.lbIP, test.lbName, test.wantLb)
+			sg, err := az.reconcileSecurityGroup("testCluster", &service, test.lbIPs, test.lbName, test.wantLb)
 			assert.Equal(t, test.expectedSg, sg)
 			assert.Equal(t, test.expectedError, err != nil)
 		})
@@ -3889,13 +4148,13 @@ func TestReconcileSecurityGroupLoadBalancerSourceRanges(t *testing.T) {
 			SecurityRules: &[]network.SecurityRule{},
 		},
 	}
-	lbIP := pointer.String("1.1.1.1")
+	lbIPs := &[]string{"1.1.1.1"}
 	expectedSg := network.SecurityGroup{
 		Name: pointer.String("nsg"),
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 			SecurityRules: &[]network.SecurityRule{
 				{
-					Name: pointer.String("atest1-TCP-80-1.2.3.4_32"),
+					Name: pointer.String("atest1-TCP-80-1.2.3.4_32-IPv4"),
 					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 						Protocol:                 network.SecurityRuleProtocol("Tcp"),
 						SourcePortRange:          pointer.String("*"),
@@ -3908,7 +4167,7 @@ func TestReconcileSecurityGroupLoadBalancerSourceRanges(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("atest1-TCP-80-deny_all"),
+					Name: pointer.String("atest1-TCP-80-deny_all-IPv4"),
 					SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 						Protocol:                 network.SecurityRuleProtocol("Tcp"),
 						SourcePortRange:          pointer.String("*"),
@@ -3926,7 +4185,7 @@ func TestReconcileSecurityGroupLoadBalancerSourceRanges(t *testing.T) {
 	mockSGClient := az.SecurityGroupsClient.(*mocksecuritygroupclient.MockInterface)
 	mockSGClient.EXPECT().Get(gomock.Any(), az.ResourceGroup, gomock.Any(), gomock.Any()).Return(existingSg, nil)
 	mockSGClient.EXPECT().CreateOrUpdate(gomock.Any(), az.ResourceGroup, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	sg, err := az.reconcileSecurityGroup("testCluster", &service, lbIP, nil, true)
+	sg, err := az.reconcileSecurityGroup("testCluster", &service, lbIPs, nil, true)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSg, *sg)
 }
@@ -4015,6 +4274,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 		expectedCreateOrUpdateCount int
 		expectedDeleteCount         int
 		expectedClientGet           *func(client *mockpublicipclient.MockInterface)
+		ipFamily                    IPFamily
 	}{
 		{
 			desc:                        "shall return nil if there's no pip in service",
@@ -4038,7 +4298,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			wantLb: true,
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("pip1"),
+					Name: pointer.String("pip1-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						IPAddress: pointer.String("1.2.3.4"),
@@ -4061,6 +4321,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			expectedCreateOrUpdateCount: 2,
 			expectedDeleteCount:         2,
 			expectedClientGet:           &deleteUnwantedPIPsAndCreateANewOneclientGet,
+			ipFamily:                    DualStack,
 		},
 		{
 			desc:        "shall report error if the given PIP name doesn't exist in the resource group",
@@ -4105,7 +4366,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("testPIP"),
+					Name: pointer.String("testPIP-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4145,6 +4406,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			expectedCreateOrUpdateCount: 0, // Before the fix, this was 1 because IPv4's IP Version was not set. Same for other tests.
 			expectedDeleteCount:         2,
+			ipFamily:                    DualStack,
 		},
 		{
 			desc:   "shall not delete unwanted PIP when there are other service references",
@@ -4155,7 +4417,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("pip1"),
+					Name: pointer.String("pip1-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4163,7 +4425,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("pip2"),
+					Name: pointer.String("pip2-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1,default/test2")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4187,7 +4449,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("testPIP"),
+					Name: pointer.String("pip1-IPv6"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4238,7 +4500,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("pip1"),
+					Name: pointer.String("pip1-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4246,7 +4508,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("pip2"),
+					Name: pointer.String("pip2-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4254,7 +4516,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("testPIP"),
+					Name: pointer.String("testPIP-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4305,6 +4567,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			expectedCreateOrUpdateCount: 2,
 			expectedDeleteCount:         2,
+			ipFamily:                    DualStack,
 		},
 		{
 			desc:   "shall preserve existing pips, when the existing pips IP tags do match",
@@ -4316,7 +4579,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("testPIP"),
+					Name: pointer.String("testPIP-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion:   network.IPv4,
@@ -4380,8 +4643,9 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 			},
-			expectedCreateOrUpdateCount: 0,
+			expectedCreateOrUpdateCount: 1, // Update testPIP-IPv6
 			expectedDeleteCount:         0,
+			ipFamily:                    DualStack,
 		},
 		{
 			desc:   "shall find the PIP by given name and shall not delete the PIP which is not owned by service",
@@ -4392,14 +4656,14 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			},
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("pip1"),
+					Name: pointer.String("pip1-IPv4"),
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
 						IPAddress:              pointer.String("1.2.3.4"),
 					},
 				},
 				{
-					Name: pointer.String("pip2"),
+					Name: pointer.String("pip2-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
@@ -4407,7 +4671,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 					},
 				},
 				{
-					Name: pointer.String("testPIP"),
+					Name: pointer.String("testPIP-IPv4"),
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						PublicIPAddressVersion: network.IPv4,
 						IPAddress:              pointer.String("1.2.3.4"),
@@ -4458,7 +4722,7 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			wantLb: false,
 			existingPIPs: []network.PublicIPAddress{
 				{
-					Name: pointer.String("pip1"),
+					Name: pointer.String("pip1-IPv4"),
 					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1,default/test2")},
 					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
 						IPAddress:              pointer.String("1.2.3.4"),
@@ -4490,6 +4754,13 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 						IPAddress:              pointer.String("1.2.3.4"),
 					},
 				},
+				{
+					Name: pointer.String("pip1-IPv6"),
+					Tags: map[string]*string{consts.ServiceTagKey: pointer.String("default/test1,default/test2")},
+					PublicIPAddressPropertiesFormat: &network.PublicIPAddressPropertiesFormat{
+						IPAddress: pointer.String("fd00::eef0"),
+					},
+				},
 			},
 			expectedIDs: []string{
 				"/subscriptions/subscription/resourceGroups/rg/providers/" +
@@ -4513,6 +4784,9 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 			createOrUpdateCount := 0
 			var m sync.Mutex
 			az := GetTestCloud(ctrl)
+			if test.ipFamily != "" {
+				az.IPFamily = test.ipFamily
+			}
 			mockPIPsClient := az.PublicIPAddressesClient.(*mockpublicipclient.MockInterface)
 			creator := mockPIPsClient.EXPECT().CreateOrUpdate(gomock.Any(), "rg", gomock.Any(), gomock.Any()).AnyTimes()
 			creator.DoAndReturn(func(ctx context.Context, resourceGroupName string, publicIPAddressName string, parameters network.PublicIPAddress) *retry.Error {
@@ -4621,8 +4895,6 @@ func TestReconcilePublicIPsCommon(t *testing.T) {
 						pip.PublicIPAddressPropertiesFormat, "pip name %q", *pip.Name)
 				}
 			}
-			assert.Equal(t, test.expectedCreateOrUpdateCount, createOrUpdateCount)
-			assert.Equal(t, test.expectedError, err != nil)
 
 			deletedCount := 0
 			for _, deleted := range deletedPips {
@@ -6087,8 +6359,9 @@ func TestReconcileZonesForFrontendIPConfigs(t *testing.T) {
 			cloud.ZoneClient = zoneClient
 
 			service := tc.service
+			pips := []network.PublicIPAddress{tc.existingPIP} // TODO: if correct?
 			defaultLBFrontendIPConfigName := cloud.getDefaultFrontendIPConfigName(&service)
-			_, _, dirty, err := cloud.reconcileFrontendIPConfigs("testCluster", &service, &lb, tc.status, true, defaultLBFrontendIPConfigName)
+			_, _, dirty, err := cloud.reconcileFrontendIPConfigs("testCluster", &service, &lb, tc.status, true, defaultLBFrontendIPConfigName, &pips)
 			if tc.expectedErr == nil {
 				assert.NoError(t, err)
 			} else {
