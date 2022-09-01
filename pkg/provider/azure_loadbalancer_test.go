@@ -3876,26 +3876,27 @@ func TestGetServiceLoadBalancerStatus(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
-			status, _, err := az.getServiceLoadBalancerStatus(test.service, test.lb)
+			status, _, _, err := az.getServiceLoadBalancerStatus(test.service, test.lb)
 			assert.Equal(t, test.expectedStatus, status)
 			assert.Equal(t, test.expectedError, err != nil)
 		})
 	}
 }
 
-func TestReconcileSecurityGroup(t *testing.T) {
+func TestReconcileSecurityGroupCommon(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	testCases := []struct {
 		desc          string
-		lbIP          *string
+		lbIPs         *[]string
 		lbName        *string
 		service       v1.Service
 		existingSgs   map[string]network.SecurityGroup
 		expectedSg    *network.SecurityGroup
 		wantLb        bool
 		expectedError bool
+		ipFamily      IPFamily
 	}{
 		{
 			desc: "reconcileSecurityGroup shall report error if the sg is shared and no ports in service",
@@ -3914,7 +3915,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			desc:          "reconcileSecurityGroup shall report error if wantLb is true and lbIP is nil",
+			desc:          "reconcileSecurityGroup shall report error if wantLb is true and lbIPs is nil",
 			service:       getTestService("test1", v1.ProtocolTCP, nil, false, 80),
 			wantLb:        true,
 			existingSgs:   map[string]network.SecurityGroup{"nsg": {}},
@@ -3927,7 +3928,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 			expectedSg:  &network.SecurityGroup{},
 		},
 		{
-			desc:    "reconcileSecurityGroup shall delete unwanted sg if wantLb is false and lbIP is nil",
+			desc:    "reconcileSecurityGroup shall delete unwanted sg if wantLb is false and lbIPs is nil",
 			service: getTestService("test1", v1.ProtocolTCP, nil, false, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name: pointer.String("nsg"),
@@ -3972,7 +3973,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			}},
-			lbIP:   pointer.String("1.1.1.1"),
+			lbIPs:  &[]string{"1.1.1.1", "fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -3991,9 +3992,23 @@ func TestReconcileSecurityGroup(t *testing.T) {
 								Direction:                network.SecurityRuleDirection("Inbound"),
 							},
 						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("fd00::eef0"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(501),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
 					},
 				},
 			},
+			ipFamily: DualStack,
 		},
 		{
 			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix for IPv6",
@@ -4002,14 +4017,14 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("fd00::eef0"),
+			lbIPs:  &[]string{"fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                 network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:          pointer.String("*"),
@@ -4024,15 +4039,60 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			},
+			ipFamily: IPv6,
 		},
 		{
-			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix with additional public IPs",
-			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAdditionalPublicIPs: "2.3.4.5"}, true, 80),
+			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix for Dual-stack",
+			service: getTestService("test1", v1.ProtocolTCP, nil, true, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.1.1.1", "fd00::eef0"},
+			wantLb: true,
+			expectedSg: &network.SecurityGroup{
+				Name: pointer.String("nsg"),
+				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
+					SecurityRules: &[]network.SecurityRule{
+						{
+							Name: pointer.String("atest1-TCP-80-Internet"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("1.1.1.1"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(500),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                 network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:          pointer.String("*"),
+								DestinationPortRange:     pointer.String("80"),
+								SourceAddressPrefix:      pointer.String("Internet"),
+								DestinationAddressPrefix: pointer.String("fd00::eef0"),
+								Access:                   network.SecurityRuleAccess("Allow"),
+								Priority:                 pointer.Int32(501),
+								Direction:                network.SecurityRuleDirection("Inbound"),
+							},
+						},
+					},
+				},
+			},
+			ipFamily: DualStack,
+		},
+		{
+			desc:    "reconcileSecurityGroup shall create sgs with correct destinationPrefix with additional public IPs",
+			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAdditionalPublicIPs: "2.3.4.5,fd00::eef1"}, true, 80),
+			existingSgs: map[string]network.SecurityGroup{"nsg": {
+				Name:                          pointer.String("nsg"),
+				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
+			}},
+			lbIPs:  &[]string{"1.2.3.4", "fd00::eef0"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -4051,15 +4111,29 @@ func TestReconcileSecurityGroup(t *testing.T) {
 								Direction:                  network.SecurityRuleDirection("Inbound"),
 							},
 						},
+						{
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
+							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
+								Protocol:                   network.SecurityRuleProtocol("Tcp"),
+								SourcePortRange:            pointer.String("*"),
+								DestinationPortRange:       pointer.String("80"),
+								SourceAddressPrefix:        pointer.String("Internet"),
+								DestinationAddressPrefixes: &([]string{"fd00::eef0", "fd00::eef1"}),
+								Access:                     network.SecurityRuleAccess("Allow"),
+								Priority:                   pointer.Int32(501),
+								Direction:                  network.SecurityRuleDirection("Inbound"),
+							},
+						},
 					},
 				},
 			},
+			ipFamily: DualStack,
 		},
 		{
 			desc:    "reconcileSecurityGroup shall not create unwanted security rules if there is service tags",
 			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationAllowedServiceTag: "tag"}, true, 80),
 			wantLb:  true,
-			lbIP:    pointer.String("1.1.1.1"),
+			lbIPs:   &[]string{"1.1.1.1"},
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name: pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
@@ -4104,7 +4178,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -4150,7 +4224,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			wantLb: false,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -4182,7 +4256,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			wantLb: false,
 			expectedSg: &network.SecurityGroup{
 				Name: pointer.String("nsg"),
@@ -4212,7 +4286,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1.2.3.4"),
+			lbIPs:  &[]string{"1.2.3.4"},
 			lbName: pointer.String("lb"),
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
@@ -4238,12 +4312,12 @@ func TestReconcileSecurityGroup(t *testing.T) {
 		},
 		{
 			desc:    "reconcileSecurityGroup shall create sgs with only IPv6 destination addresses for IPv6 services with floating IP disabled",
-			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationDisableLoadBalancerFloatingIP: "true"}, false, 80),
+			service: getTestService("test1", v1.ProtocolTCP, map[string]string{consts.ServiceAnnotationDisableLoadBalancerFloatingIP: "true"}, true, 80),
 			existingSgs: map[string]network.SecurityGroup{"nsg": {
 				Name:                          pointer.String("nsg"),
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{},
 			}},
-			lbIP:   pointer.String("1234::5"),
+			lbIPs:  &[]string{"1234::5"},
 			lbName: pointer.String("lb"),
 			wantLb: true,
 			expectedSg: &network.SecurityGroup{
@@ -4251,7 +4325,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
 					SecurityRules: &[]network.SecurityRule{
 						{
-							Name: pointer.String("atest1-TCP-80-Internet"),
+							Name: pointer.String("atest1-TCP-80-Internet-IPv6"),
 							SecurityRulePropertiesFormat: &network.SecurityRulePropertiesFormat{
 								Protocol:                   network.SecurityRuleProtocol("Tcp"),
 								SourcePortRange:            pointer.String("*"),
@@ -4266,12 +4340,16 @@ func TestReconcileSecurityGroup(t *testing.T) {
 					},
 				},
 			},
+			ipFamily: IPv6,
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
 			az := GetTestCloud(ctrl)
+			if test.ipFamily != "" {
+				az.IPFamily = test.ipFamily
+			}
 			mockSGsClient := az.SecurityGroupsClient.(*mocksecuritygroupclient.MockInterface)
 			mockSGsClient.EXPECT().CreateOrUpdate(gomock.Any(), "rg", gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 			if len(test.existingSgs) == 0 {
@@ -4289,7 +4367,7 @@ func TestReconcileSecurityGroup(t *testing.T) {
 				mockLBClient.EXPECT().Get(gomock.Any(), "rg", *test.lbName, gomock.Any()).Return(network.LoadBalancer{}, nil)
 			}
 			service := test.service
-			sg, err := az.reconcileSecurityGroup("testCluster", &service, test.lbIP, test.lbName, test.wantLb)
+			sg, err := az.reconcileSecurityGroup("testCluster", &service, test.lbIPs, test.lbName, test.wantLb)
 			assert.Equal(t, test.expectedSg, sg)
 			assert.Equal(t, test.expectedError, err != nil)
 		})
@@ -4309,7 +4387,7 @@ func TestReconcileSecurityGroupLoadBalancerSourceRanges(t *testing.T) {
 			SecurityRules: &[]network.SecurityRule{},
 		},
 	}
-	lbIP := pointer.String("1.1.1.1")
+	lbIPs := &[]string{"1.1.1.1"}
 	expectedSg := network.SecurityGroup{
 		Name: pointer.String("nsg"),
 		SecurityGroupPropertiesFormat: &network.SecurityGroupPropertiesFormat{
@@ -4346,7 +4424,7 @@ func TestReconcileSecurityGroupLoadBalancerSourceRanges(t *testing.T) {
 	mockSGClient := az.SecurityGroupsClient.(*mocksecuritygroupclient.MockInterface)
 	mockSGClient.EXPECT().Get(gomock.Any(), az.ResourceGroup, gomock.Any(), gomock.Any()).Return(existingSg, nil)
 	mockSGClient.EXPECT().CreateOrUpdate(gomock.Any(), az.ResourceGroup, gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	sg, err := az.reconcileSecurityGroup("testCluster", &service, lbIP, nil, true)
+	sg, err := az.reconcileSecurityGroup("testCluster", &service, lbIPs, nil, true)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSg, *sg)
 }

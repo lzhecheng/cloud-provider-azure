@@ -158,6 +158,7 @@ func startNodeIpamController(ctx context.Context, controllerContext genericcontr
 	if err != nil {
 		return nil, false, err
 	}
+	klog.V(4).Infof("cluster CIDRs: %v; is dualstack: %v", clusterCIDRs, dualStack)
 
 	// failure: more than one cidr but they are not configured as dual stack
 	if len(clusterCIDRs) > 1 && !dualStack {
