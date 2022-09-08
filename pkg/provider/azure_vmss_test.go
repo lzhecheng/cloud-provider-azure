@@ -25,6 +25,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-03-01/compute"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2022-07-01/network"
+	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
@@ -109,6 +110,7 @@ func buildTestVMSS(name, computerNamePrefix string) compute.VirtualMachineScaleS
 	return compute.VirtualMachineScaleSet{
 		Name: &name,
 		VirtualMachineScaleSetProperties: &compute.VirtualMachineScaleSetProperties{
+			OrchestrationMode: compute.OrchestrationModeUniform,
 			VirtualMachineProfile: &compute.VirtualMachineScaleSetVMProfile{
 				OsProfile: &compute.VirtualMachineScaleSetOSProfile{
 					ComputerNamePrefix: &computerNamePrefix,
@@ -606,6 +608,9 @@ func TestGetNodeNameByIPConfigurationID(t *testing.T) {
 		expectedVMs, _, _ := buildTestVirtualMachineEnv(ss.cloud, test.scaleSet, "", 0, test.vmList, "", false)
 		mockVMSSVMClient.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(expectedVMs, nil).AnyTimes()
 
+		mockVMsClient := ss.cloud.VirtualMachinesClient.(*mockvmclient.MockInterface)
+		mockVMsClient.EXPECT().List(gomock.Any(), gomock.Any()).Return([]compute.VirtualMachine{}, nil).AnyTimes()
+
 		nodeName, scalesetName, err := ss.GetNodeNameByIPConfigurationID(test.ipConfigurationID)
 		if test.expectError {
 			assert.Error(t, err, test.description)
@@ -1008,7 +1013,7 @@ func TestGetInstanceTypeByNodeName(t *testing.T) {
 			vmList:       []string{"vmss-vm-000000"},
 			vmClientErr:  &retry.Error{RawError: fmt.Errorf("error")},
 			expectedType: "",
-			expectedErr:  fmt.Errorf("newAvailabilitySetNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
+			expectedErr:  fmt.Errorf("getter function of nonVmssUniformNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
 		},
 	}
 
@@ -1133,7 +1138,7 @@ func TestGetPrimaryInterface(t *testing.T) {
 			vmList:              []string{"vmss-vm-000000"},
 			hasPrimaryInterface: true,
 			vmClientErr:         &retry.Error{RawError: fmt.Errorf("error")},
-			expectedErr:         fmt.Errorf("newAvailabilitySetNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
+			expectedErr:         fmt.Errorf("getter function of nonVmssUniformNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
 		},
 		{
 			description:         "GetPrimaryInterface should report the error if vmss client returns retry error",
@@ -1299,7 +1304,7 @@ func TestGetPrivateIPsByNodeName(t *testing.T) {
 			vmList:             []string{"vmss-vm-000000"},
 			vmClientErr:        &retry.Error{RawError: fmt.Errorf("error")},
 			expectedPrivateIPs: []string{},
-			expectedErr:        fmt.Errorf("newAvailabilitySetNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
+			expectedErr:        fmt.Errorf("getter function of nonVmssUniformNodesCache: failed to list vms in the resource group rg: Retriable: false, RetryAfter: 0s, HTTPStatusCode: 0, RawError: error"),
 		},
 	}
 
@@ -2931,8 +2936,8 @@ func TestEnsureBackendPoolDeleted(t *testing.T) {
 		mockVMSSVMClient.EXPECT().List(gomock.Any(), ss.ResourceGroup, testVMSSName, gomock.Any()).Return(expectedVMSSVMs, nil).AnyTimes()
 		mockVMSSVMClient.EXPECT().UpdateVMs(gomock.Any(), ss.ResourceGroup, testVMSSName, gomock.Any(), gomock.Any(), gomock.Any()).Return(test.vmClientErr).Times(test.expectedVMSSVMPutTimes)
 
-		mockVMClient := ss.cloud.VirtualMachinesClient.(*mockvmclient.MockInterface)
-		mockVMClient.EXPECT().List(gomock.Any(), ss.ResourceGroup).Return([]compute.VirtualMachine{}, nil).AnyTimes()
+		mockVMsClient := ss.cloud.VirtualMachinesClient.(*mockvmclient.MockInterface)
+		mockVMsClient.EXPECT().List(gomock.Any(), gomock.Any()).Return([]compute.VirtualMachine{}, nil).AnyTimes()
 
 		updated, err := ss.EnsureBackendPoolDeleted(&v1.Service{}, test.backendpoolID, testVMSSName, test.backendAddressPools, true)
 		assert.Equal(t, test.expectedErr, err != nil, test.description+", but an error occurs")
@@ -3042,7 +3047,7 @@ func TestGetNodeCIDRMasksByProviderID(t *testing.T) {
 		{
 			description: "GetNodeCIDRMasksByProviderID should report an error if the providerID is not valid",
 			providerID:  "invalid",
-			expectedErr: ErrorNotVmssInstance,
+			expectedErr: fmt.Errorf("getVMManagementTypeByProviderID : failed to check the providerID invalid management type"),
 		},
 		{
 			description: "GetNodeCIDRMaksByProviderID should return the correct mask sizes",
@@ -3079,14 +3084,20 @@ func TestGetNodeCIDRMasksByProviderID(t *testing.T) {
 			expectedVMSS := compute.VirtualMachineScaleSet{
 				Name: pointer.String("vmss"),
 				Tags: tc.tags,
+				VirtualMachineScaleSetProperties: &compute.VirtualMachineScaleSetProperties{
+					OrchestrationMode: compute.OrchestrationModeUniform,
+				},
 			}
 			mockVMSSClient := ss.cloud.VirtualMachineScaleSetsClient.(*mockvmssclient.MockInterface)
 			mockVMSSClient.EXPECT().List(gomock.Any(), ss.ResourceGroup).Return([]compute.VirtualMachineScaleSet{expectedVMSS}, nil).MaxTimes(1)
 
+			mockVMsClient := ss.cloud.VirtualMachinesClient.(*mockvmclient.MockInterface)
+			mockVMsClient.EXPECT().List(gomock.Any(), gomock.Any()).Return([]compute.VirtualMachine{}, nil).AnyTimes()
+
 			ipv4MaskSize, ipv6MaskSize, err := ss.GetNodeCIDRMasksByProviderID(tc.providerID)
-			assert.Equal(t, tc.expectedErr, err)
-			assert.Equal(t, tc.expectedIPV4MaskSize, ipv4MaskSize)
-			assert.Equal(t, tc.expectedIPV6MaskSize, ipv6MaskSize)
+			assert.Equal(t, tc.expectedErr, err, tc.description)
+			assert.Equal(t, tc.expectedIPV4MaskSize, ipv4MaskSize, tc.description)
+			assert.Equal(t, tc.expectedIPV6MaskSize, ipv6MaskSize, tc.description)
 		})
 	}
 }
@@ -3102,6 +3113,9 @@ func TestGetAgentPoolVMSetNamesMixedInstances(t *testing.T) {
 		{
 			Name: pointer.String("vm-0"),
 			VirtualMachineProperties: &compute.VirtualMachineProperties{
+				OsProfile: &compute.OSProfile{
+					ComputerName: to.StringPtr("vm-0"),
+				},
 				AvailabilitySet: &compute.SubResource{
 					ID: pointer.String("vmas-0"),
 				},
@@ -3110,6 +3124,9 @@ func TestGetAgentPoolVMSetNamesMixedInstances(t *testing.T) {
 		{
 			Name: pointer.String("vm-1"),
 			VirtualMachineProperties: &compute.VirtualMachineProperties{
+				OsProfile: &compute.OSProfile{
+					ComputerName: to.StringPtr("vm-1"),
+				},
 				AvailabilitySet: &compute.SubResource{
 					ID: pointer.String("vmas-1"),
 				},
@@ -3159,13 +3176,13 @@ func TestGetNodeVMSetNameVMSS(t *testing.T) {
 
 	ss, err := NewTestScaleSet(ctrl)
 	assert.NoError(t, err)
-	mockVMSet := NewMockVMSet(ctrl)
-	mockVMSet.EXPECT().GetNodeVMSetName(gomock.Any()).Return("as", nil)
-	ss.availabilitySet = mockVMSet
+
+	mockVMsClient := ss.cloud.VirtualMachinesClient.(*mockvmclient.MockInterface)
+	mockVMsClient.EXPECT().List(gomock.Any(), gomock.Any()).Return([]compute.VirtualMachine{}, nil).AnyTimes()
 
 	vmSetName, err := ss.GetNodeVMSetName(node)
-	assert.NoError(t, err)
-	assert.Equal(t, "as", vmSetName)
+	assert.Equal(t, ErrorNotVmssInstance, err)
+	assert.Equal(t, "", vmSetName)
 
 	node = &v1.Node{
 		Spec: v1.NodeSpec{
@@ -3213,6 +3230,9 @@ func TestScaleSet_VMSSBatchSize(t *testing.T) {
 			Name: pointer.String("foo"),
 			Tags: map[string]*string{
 				consts.VMSSTagForBatchOperation: pointer.String(""),
+			},
+			VirtualMachineScaleSetProperties: &compute.VirtualMachineScaleSetProperties{
+				OrchestrationMode: compute.OrchestrationModeUniform,
 			},
 		}
 		mockVMSSClient := ss.Cloud.VirtualMachineScaleSetsClient.(*mockvmssclient.MockInterface)
