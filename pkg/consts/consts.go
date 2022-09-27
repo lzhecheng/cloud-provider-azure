@@ -187,6 +187,16 @@ const (
 	BackoffJitterDefault = 1.0
 )
 
+// LB variables for dual-stack
+var (
+	// There's no "service.beta.kubernetes.io/azure-load-balancer" annotation before these 2 new ones are added.
+	// Service.Spec.LoadBalancerIP was used and it will be deprecated.
+	ServiceAnnotationLoadBalancerIPDualStack = map[bool]string{
+		false: "service.beta.kubernetes.io/azure-load-balancer-ipv4",
+		true:  "service.beta.kubernetes.io/azure-load-balancer-ipv6",
+	}
+)
+
 // load balancer
 const (
 	// PreConfiguredBackendPoolLoadBalancerTypesNone means that the load balancers are not pre-configured
