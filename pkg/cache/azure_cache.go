@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"k8s.io/client-go/tools/cache"
+
+	"sigs.k8s.io/cloud-provider-azure/pkg/util/deepcopy"
 )
 
 // AzureCacheReadType defines the read type for cache data
@@ -120,8 +122,8 @@ func (t *TimedCache) getInternal(key string) (*AzureCacheEntry, error) {
 	return newEntry, nil
 }
 
-// Get returns the requested item by key.
-func (t *TimedCache) Get(key string, crt AzureCacheReadType) (interface{}, error) {
+// GetWithoutCopy returns the requested item by key without deep copying the object.
+func (t *TimedCache) GetWithoutCopy(key string, crt AzureCacheReadType) (interface{}, error) {
 	entry, err := t.getInternal(key)
 	if err != nil {
 		return nil, err
@@ -139,6 +141,45 @@ func (t *TimedCache) Get(key string, crt AzureCacheReadType) (interface{}, error
 		// if cached data is not expired, return cached data
 		if crt == CacheReadTypeDefault && time.Since(entry.CreatedOn) < t.TTL {
 			return entry.Data, nil
+		}
+	}
+	// Data is not cached yet, cache data is expired or requested force refresh
+	// cache it by getter. entry is locked before getting to ensure concurrent
+	// gets don't result in multiple ARM calls.
+	data, err := t.Getter(key)
+	if err != nil {
+		return nil, err
+	}
+
+	// set the data in cache and also set the last update time
+	// to now as the data was recently fetched
+	entry.Data = data
+	entry.CreatedOn = time.Now().UTC()
+
+	return entry.Data, nil
+}
+
+// Get returns the requested item by key with deep copy.
+func (t *TimedCache) Get(key string, crt AzureCacheReadType) (interface{}, error) {
+	entry, err := t.getInternal(key)
+	if err != nil {
+		return nil, err
+	}
+
+	entry.Lock.Lock()
+	defer entry.Lock.Unlock()
+
+	// entry exists and if cache is not force refreshed
+	if entry.Data != nil && crt != CacheReadTypeForceRefresh {
+		// allow unsafe read, so return data even if expired
+		if crt == CacheReadTypeUnsafe {
+			copied := deepcopy.Copy(entry.Data)
+			return copied, nil
+		}
+		// if cached data is not expired, return cached data
+		if crt == CacheReadTypeDefault && time.Since(entry.CreatedOn) < t.TTL {
+			copied := deepcopy.Copy(entry.Data)
+			return copied, nil
 		}
 	}
 	// Data is not cached yet, cache data is expired or requested force refresh

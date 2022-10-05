@@ -109,12 +109,14 @@ func TestVMSSVMCache(t *testing.T) {
 		vmName := to.String(vm.OsProfile.ComputerName)
 		realVM, err := ss.getVmssVM(vmName, azcache.CacheReadTypeDefault)
 		assert.NoError(t, err)
+		assert.NotNil(t, realVM)
 		assert.Equal(t, "vmss", realVM.VMSSName)
 		assert.Equal(t, to.String(vm.InstanceID), realVM.InstanceID)
 		assert.Equal(t, &vm, realVM.AsVirtualMachineScaleSetVM())
 	}
 
 	// validate DeleteCacheForNode().
+	// It just removes a cache entry but the Node actually exists.
 	vm := expectedVMs[0]
 	vmName := to.String(vm.OsProfile.ComputerName)
 	err = ss.DeleteCacheForNode(vmName)
