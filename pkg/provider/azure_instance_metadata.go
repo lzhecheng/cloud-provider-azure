@@ -241,7 +241,7 @@ func (ims *InstanceMetadataService) getLoadBalancerMetadata() (*LoadBalancerMeta
 // GetMetadata gets instance metadata from cache.
 // crt determines if we can get data from stalled cache/need fresh if cache expired.
 func (ims *InstanceMetadataService) GetMetadata(crt azcache.AzureCacheReadType) (*InstanceMetadata, error) {
-	cache, err := ims.imsCache.Get(consts.MetadataCacheKey, crt)
+	cache, err := ims.imsCache.GetWithDeepCopy(consts.MetadataCacheKey, crt)
 	if err != nil {
 		return nil, err
 	}

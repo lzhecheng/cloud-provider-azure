@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mohae/deepcopy"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -155,6 +156,46 @@ func (t *TimedCache) Get(key string, crt AzureCacheReadType) (interface{}, error
 	entry.CreatedOn = time.Now().UTC()
 
 	return entry.Data, nil
+}
+
+// Get returns the requested item by key with deep copy.
+func (t *TimedCache) GetWithDeepCopy(key string, crt AzureCacheReadType) (interface{}, error) {
+	entry, err := t.getInternal(key)
+	if err != nil {
+		return nil, err
+	}
+
+	entry.Lock.Lock()
+	defer entry.Lock.Unlock()
+
+	// entry exists and if cache is not force refreshed
+	if entry.Data != nil && crt != CacheReadTypeForceRefresh {
+		// allow unsafe read, so return data even if expired
+		if crt == CacheReadTypeUnsafe {
+			copied := deepcopy.Copy(entry.Data)
+			return copied, nil
+		}
+		// if cached data is not expired, return cached data
+		if crt == CacheReadTypeDefault && time.Since(entry.CreatedOn) < t.TTL {
+			copied := deepcopy.Copy(entry.Data)
+			return copied, nil
+		}
+	}
+	// Data is not cached yet, cache data is expired or requested force refresh
+	// cache it by getter. entry is locked before getting to ensure concurrent
+	// gets don't result in multiple ARM calls.
+	data, err := t.Getter(key)
+	if err != nil {
+		return nil, err
+	}
+
+	// set the data in cache and also set the last update time
+	// to now as the data was recently fetched
+	entry.Data = data
+	entry.CreatedOn = time.Now().UTC()
+
+	copied := deepcopy.Copy(entry.Data)
+	return copied, nil
 }
 
 // Delete removes an item from the cache.

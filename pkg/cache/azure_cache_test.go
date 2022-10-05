@@ -118,6 +118,38 @@ func TestCacheGetError(t *testing.T) {
 	assert.Nil(t, val)
 }
 
+func TestCacheGetWithDeepCopy(t *testing.T) {
+	val := &fakeDataObj{}
+	valChanged := &fakeDataObj{}
+	cases := []struct {
+		name     string
+		data     map[string]*fakeDataObj
+		key      string
+		expected interface{}
+	}{
+		{
+			name:     "cache should return data for existing key",
+			data:     map[string]*fakeDataObj{"key1": val},
+			key:      "key1",
+			expected: val,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dataSource, cache := newFakeCache(t)
+			dataSource.set(c.data)
+			val, err := cache.GetWithDeepCopy(c.key, CacheReadTypeDefault)
+			assert.NoError(t, err)
+			assert.Equal(t, c.expected, val)
+
+			// Change the value
+			c.data[c.key] = valChanged
+			assert.Equal(t, c.expected, val)
+		})
+	}
+}
+
 func TestCacheDelete(t *testing.T) {
 	val := &fakeDataObj{}
 	data := map[string]*fakeDataObj{
