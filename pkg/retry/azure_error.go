@@ -91,11 +91,12 @@ func (err *Error) Error() error {
 
 // IsThrottled returns true the if the request is being throttled.
 func (err *Error) IsThrottled() bool {
-	if err == nil {
-		return false
-	}
+	return false
+	// if err == nil {
+	// 	return false
+	// }
 
-	return err.HTTPStatusCode == http.StatusTooManyRequests || err.RetryAfter.After(now())
+	// return err.HTTPStatusCode == http.StatusTooManyRequests || err.RetryAfter.After(now())
 }
 
 // IsNotFound returns true the if the requested object wasn't found

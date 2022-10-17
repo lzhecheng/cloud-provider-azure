@@ -122,6 +122,15 @@ func DoHackRegionalRetryForGET(c *Client) autorest.SendDecorator {
 			trimmed := strings.TrimSpace(bodyString)
 			klog.V(5).Infof("Send.sendRequest got response with ContentLength %d, StatusCode %d and responseBody length %d", response.ContentLength, response.StatusCode, len(trimmed))
 
+			if response.StatusCode == 429 {
+				klog.Infof("DEBUGGING: 429 status code, bodyBytes %q", bodyBytes)
+			}
+
+			var body map[string]interface{}
+			if e := json.Unmarshal(bodyBytes, &body); e != nil {
+				klog.Infof("DEBUGGING: error in parsing response body string %q: %s", bodyBytes, e.Error())
+			}
+
 			// Hack: retry the regional ARM endpoint in case of ARM traffic split and arm resource group replication is too slow
 			// Empty content and 2xx http status code are returned in this case.
 			// Issue: https://github.com/kubernetes-sigs/cloud-provider-azure/issues/1296

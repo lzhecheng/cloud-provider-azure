@@ -150,7 +150,7 @@ func WaitServiceExposure(cs clientset.Interface, namespace string, name string, 
 		}
 	}
 
-	if err := wait.PollImmediate(10*time.Second, timeout, func() (bool, error) {
+	if err := wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
 		service, err = cs.CoreV1().Services(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			if IsRetryableAPIError(err) {

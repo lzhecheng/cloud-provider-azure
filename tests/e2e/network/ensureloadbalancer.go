@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2021-08-01/network"
@@ -106,6 +107,113 @@ var _ = Describe("Ensure LoadBalancer", Label(utils.TestSuiteLabelLB), func() {
 		cs = nil
 		ns = nil
 		tc = nil
+	})
+
+	It("Verify: multiple get LB", func() {
+		var wg sync.WaitGroup
+		errFound := false
+		get := func(name string) {
+			defer wg.Done()
+			getNum := 400
+			eachNum := 50
+			lbName := "kubernetes"
+			utils.Logf("[%s] Get LB %q for %d times", name, lbName, getNum)
+			rg := tc.GetResourceGroup()
+			for i := 0; i < getNum; i++ {
+				if i != 0 && i%eachNum == 0 {
+					utils.Logf("[%s] %d requests reached", name, i)
+				}
+				_, err := tc.GetLoadBalancer(rg, lbName)
+				if err != nil {
+					utils.Logf("[%s] failed to get LB %q: %v", name, lbName, err)
+					errFound = true
+					break
+				}
+			}
+			utils.Logf("[%s] Get LB %q finished", name, lbName)
+		}
+		for i := 0; i < 20; i++ {
+			wg.Add(1)
+			go get(fmt.Sprintf("r%d", i))
+		}
+		wg.Wait()
+
+		// Network throttling: 10k/5min read
+		if !errFound {
+			time.Sleep(1 * time.Minute)
+			for i := 0; i < 20; i++ {
+				wg.Add(1)
+				go get(fmt.Sprintf("r%d", i))
+			}
+			wg.Wait()
+		}
+
+		// Network throttling: 10k/5min read
+		if !errFound {
+			time.Sleep(1 * time.Minute)
+			for i := 0; i < 20; i++ {
+				wg.Add(1)
+				go get(fmt.Sprintf("r%d", i))
+			}
+			wg.Wait()
+		}
+		// Network throttling: 10k/5min read
+		if !errFound {
+			time.Sleep(1 * time.Minute)
+			for i := 0; i < 20; i++ {
+				wg.Add(1)
+				go get(fmt.Sprintf("r%d", i))
+			}
+			wg.Wait()
+		}
+
+		//
+
+		utils.Logf("Updating deployment %s", testDeploymentName)
+		tcpPort := int32(serverPort)
+		udpPort := int32(testingPort)
+		deployment := createDeploymentManifest(testDeploymentName, labels, &tcpPort, &udpPort)
+		_, err := cs.AppsV1().Deployments(ns.Name).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("creating a mixed protocol service")
+		mixedProtocolPorts := []v1.ServicePort{
+			{
+				Name:       "tcp",
+				Port:       serverPort,
+				TargetPort: intstr.FromInt(serverPort),
+				Protocol:   v1.ProtocolTCP,
+			},
+			{
+				Name:       "udp",
+				Port:       testingPort,
+				TargetPort: intstr.FromInt(testingPort),
+				Protocol:   v1.ProtocolUDP,
+			},
+		}
+		service := utils.CreateLoadBalancerServiceManifest(testServiceName, nil, labels, ns.Name, mixedProtocolPorts)
+		_, err = cs.CoreV1().Services(ns.Name).Create(context.TODO(), service, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		ip, err := utils.WaitServiceExposureAndValidateConnectivity(cs, ns.Name, testServiceName, "")
+		Expect(err).NotTo(HaveOccurred())
+
+		By("checking load balancing rules")
+		foundTCP, foundUDP := false, false
+		lb := getAzureLoadBalancerFromPIP(tc, ip, tc.GetResourceGroup(), "")
+		for _, rule := range *lb.LoadBalancingRules {
+			switch {
+			case strings.EqualFold(string(rule.Protocol), string(v1.ProtocolTCP)):
+				if to.Int32(rule.FrontendPort) == serverPort {
+					foundTCP = true
+				}
+			case strings.EqualFold(string(rule.Protocol), string(v1.ProtocolUDP)):
+				if to.Int32(rule.FrontendPort) == testingPort {
+					foundUDP = true
+				}
+			}
+		}
+		Expect(foundTCP).To(BeTrue())
+		Expect(foundUDP).To(BeTrue())
 	})
 
 	It("should support mixed protocol services", func() {
