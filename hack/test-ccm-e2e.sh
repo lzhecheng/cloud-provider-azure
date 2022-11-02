@@ -23,4 +23,8 @@ LABEL_FILTER="${LABEL_FILTER:-${DEFAULT_LABEL_FILTER}}"
 
 source "${REPO_ROOT}/hack/ensure-ginkgo-v2.sh"
 
-ginkgo -flake-attempts 2 -label-filter "${LABEL_FILTER}" "${REPO_ROOT}"/tests/e2e/
+if [[ -n "${CCM_E2E_TIMEOUT}" ]]; then
+  ginkgo -flake-attempts 2 -label-filter "${LABEL_FILTER}" "${REPO_ROOT}"/tests/e2e/ --timeout "${CCM_E2E_TIMEOUT}"
+else
+  ginkgo -flake-attempts 2 -label-filter "${LABEL_FILTER}" "${REPO_ROOT}"/tests/e2e/
+fi
