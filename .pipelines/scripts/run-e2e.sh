@@ -83,7 +83,10 @@ fi
 CUSTOM_CONFIG_PATH="${CUSTOM_CONFIG_PATH:-${REPO_ROOT}/.pipelines/templates/customconfiguration.json}"
 
 rm -rf kubetest2-aks
-git clone https://github.com/kubernetes-sigs/cloud-provider-azure.git
+git clone https://github.com/lzhecheng/cloud-provider-azure.git
+pushd cloud-provider-azure
+git checkout kubetest2-enhance
+popd
 cp -r cloud-provider-azure/kubetest2-aks .
 rm -rf cloud-provider-azure
 git config --global --add safe.directory "$(pwd)" || true
@@ -113,6 +116,8 @@ kubetest2 aks --up --rgName "${RESOURCE_GROUP:-}" \
 --customConfig "${CUSTOM_CONFIG_PATH}" \
 --clusterName "${CLUSTER_NAME:-}" \
 --ccmImageTag "${IMAGE_TAG:-}" \
+--kubernetesImageTag "${IMAGE_TAG:-}" \
+--kubeletURL "${KUBELET_URL:-}" \
 --k8sVersion "${AKS_KUBERNETES_VERSION:-}"
 
 export KUBECONFIG="${REPO_ROOT}/_kubeconfig/${RESOURCE_GROUP:-}_${CLUSTER_NAME:-}.kubeconfig"
