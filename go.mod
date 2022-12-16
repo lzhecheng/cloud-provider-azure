@@ -3,6 +3,7 @@ module sigs.k8s.io/cloud-provider-azure
 go 1.16
 
 require (
+	cloud.google.com/go v0.81.0 // indirect
 	github.com/Azure/azure-sdk-for-go v55.8.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.11.19
 	github.com/Azure/go-autorest/autorest/adal v0.9.14
@@ -17,11 +18,13 @@ require (
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
 	github.com/rubiojr/go-vhd v0.0.0-20200706105327-02e210299021
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/afero v1.6.0 // indirect
+	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
+	golang.org/x/oauth2 v0.0.0-20210402161424-2e8d93401602 // indirect
 	k8s.io/api v0.22.0
 	k8s.io/apimachinery v0.22.0
 	k8s.io/apiserver v0.22.0
