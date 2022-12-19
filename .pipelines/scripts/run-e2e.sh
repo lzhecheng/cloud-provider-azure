@@ -92,6 +92,8 @@ kubetest2 aks --up --rgName "${RESOURCE_GROUP:-}" \
 --customConfig "${REPO_ROOT}/.pipelines/templates/customconfiguration.json" \
 --clusterName "${CLUSTER_NAME:-}" \
 --ccmImageTag "${IMAGE_TAG:-}" \
+--kubernetesImageTag "${IMAGE_TAG:-}" \
+--kubeletURL "${KUBELET_URL:-}" \
 --k8sVersion "${KUBERNETES_VERSION:-}"
 
 export KUBECONFIG="${REPO_ROOT}/_kubeconfig/${RESOURCE_GROUP:-}_${CLUSTER_NAME:-}.kubeconfig"
@@ -120,4 +122,9 @@ export E2E_ON_AKS_CLUSTER=true
 if [[ "${CLUSTER_TYPE:-}" =~ "autoscaling" ]]; then
   export LABEL_FILTER="Feature:Autoscaling || !Serial && !Slow"
 fi
-make test-ccm-e2e
+
+if [[ "${TEST_K8S_E2E:-}" == "true" ]]; then
+  make test-e2e-capz
+else
+  make test-ccm-e2e
+fi
