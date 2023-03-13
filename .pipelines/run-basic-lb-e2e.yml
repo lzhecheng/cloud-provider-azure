@@ -25,6 +25,8 @@ stages:
     - job: build_push_ccm_image_job
       timeoutInMinutes: 30
       steps:
+        - bash: |
+            exit 1
         - template: ./ccm-image.yml
     - job: build_push_cnm_image_job
       timeoutInMinutes: 30
