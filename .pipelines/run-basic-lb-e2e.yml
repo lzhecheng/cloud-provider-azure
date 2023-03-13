@@ -1,15 +1,4 @@
 trigger:
-- task: EmailReport@1
-  inputs:
-    sendMailConditionConfig: 'On Failure'
-    subject: '[{environmentStatus}] {passPercentage} tests passed in $(Release.EnvironmentName) stage for $(Build.BuildNumber)'
-    toAddress: 'zhechengli@microsoft.com'
-    defaultDomain: 'microsoft.com'
-    groupTestResultsBy: 'run'
-    includeCommits: true
-    maxTestFailuresToShow: '15'
-    includeOthersInTotal: false
-    usePreviousEnvironment: false
   branches:
     include:
     - master
@@ -55,3 +44,14 @@ stages:
             echo "##vso[task.setvariable variable=CLUSTER_TYPE]${CLUSTER_TYPE}"
           displayName: set cluster type
         - template: run-e2e.yml
+        - task: EmailReport@1
+          inputs:
+            sendMailConditionConfig: 'On Failure'
+            subject: '[{environmentStatus}] {passPercentage} tests passed in $(Release.EnvironmentName) stage for $(Build.BuildNumber)'
+            toAddress: 'zhechengli@microsoft.com'
+            defaultDomain: 'microsoft.com'
+            groupTestResultsBy: 'run'
+            includeCommits: true
+            maxTestFailuresToShow: '15'
+            includeOthersInTotal: false
+            usePreviousEnvironment: false
