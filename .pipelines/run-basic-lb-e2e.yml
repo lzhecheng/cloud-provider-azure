@@ -28,6 +28,17 @@ stages:
         - bash: |
             exit 1
         - template: ./ccm-image.yml
+        - task: EmailReport@1
+          inputs:
+            sendMailConditionConfig: 'On Failure'
+            subject: '[{environmentStatus}] {passPercentage} tests passed in $(Release.EnvironmentName) stage for $(Build.BuildNumber)'
+            toAddress: 'zhechengli@microsoft.com'
+            defaultDomain: 'microsoft.com'
+            groupTestResultsBy: 'run'
+            includeCommits: true
+            maxTestFailuresToShow: '15'
+            includeOthersInTotal: false
+            usePreviousEnvironment: false
     - job: build_push_cnm_image_job
       timeoutInMinutes: 30
       steps:
