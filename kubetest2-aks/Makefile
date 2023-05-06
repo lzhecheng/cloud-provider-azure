@@ -52,6 +52,13 @@ deployer:
 	BUILD_FLAGS='-trimpath -ldflags="-buildid= -X=sigs.k8s.io/cloud-provider-azure/kubetest2-aks/deployer.GitTag=$(COMMIT)"'
 	CGO_ENABLED=1 go build -v $(BUILD_FLAGS) -o $(OUT_DIR)/$(BINARY_NAME) $(BINARY_PATH)
 
+.PHONY: deployer-cgo-disabled
+deployer-cgo-disabled:
+	BINARY_PATH=.
+	BINARY_NAME=kubetest2-aks
+	BUILD_FLAGS='-trimpath -ldflags="-buildid= -X=sigs.k8s.io/cloud-provider-azure/kubetest2-aks/deployer.GitTag=$(COMMIT)"'
+	go build -v $(BUILD_FLAGS) -o $(OUT_DIR)/$(BINARY_NAME) $(BINARY_PATH)
+
 .PHONY: install
 install:
 	BINARY_NAME=kubetest2-aks
@@ -60,3 +67,6 @@ install:
 
 .PHONY: install-deployer
 install-deployer: deployer install
+
+.PHONY: install-deployer-cgo-disabled
+install-deployer-cgo-disabled: deployer-cgo-disabled install
