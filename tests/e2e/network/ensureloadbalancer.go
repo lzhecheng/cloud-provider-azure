@@ -649,7 +649,7 @@ var _ = Describe("Ensure LoadBalancer", Label(utils.TestSuiteLabelLB), func() {
 		}
 	})
 
-	It("should support node label `node.kubernetes.io/exclude-from-external-load-balancers`", func() {
+	It("should support node label `node.kubernetes.io/exclude-from-external-load-balancers`", Label(utils.TestSuiteLabelDEBUG), func() {
 		label := "node.kubernetes.io/exclude-from-external-load-balancers"
 		By("Checking the number of the node pools")
 		nodes, err := utils.GetAgentNodes(cs)
@@ -1132,10 +1132,12 @@ func waitForNodesInLBBackendPool(tc *utils.AzureTestClient, ip string, expectedN
 		lb := getAzureLoadBalancerFromPIP(tc, ip, tc.GetResourceGroup(), "")
 		lbBackendPoolIPConfigs := (*lb.BackendAddressPools)[getLBBackendPoolIndex(lb)].BackendIPConfigurations
 		ipConfigNum := 0
+		ids := []string{}
 		if lbBackendPoolIPConfigs != nil {
 			if utils.IsAutoscalingAKSCluster() {
 				for _, ipconfig := range *lbBackendPoolIPConfigs {
 					if !strings.Contains(*ipconfig.ID, utils.SystemPool) {
+						ids = append(ids, *ipconfig.ID)
 						ipConfigNum++
 					}
 				}
@@ -1143,6 +1145,7 @@ func waitForNodesInLBBackendPool(tc *utils.AzureTestClient, ip string, expectedN
 				ipConfigNum = len(*lbBackendPoolIPConfigs)
 			}
 		}
+		utils.Logf("DEBUG ids %q", ids)
 		if expectedNum == ipConfigNum {
 			return true, nil
 		}

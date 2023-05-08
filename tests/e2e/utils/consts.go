@@ -37,4 +37,5 @@ const (
 	TestSuiteLabelLB                 = "LB"
 	TestSuiteLabelMultiPorts         = "Multi-Ports"
 	TestSuiteLabelNSG                = "NSG"
+	TestSuiteLabelDEBUG              = "DEBUG"
 )

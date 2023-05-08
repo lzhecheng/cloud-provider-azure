@@ -65,6 +65,7 @@ if [[ -z "${AZURE_LOCATION:-}" ]]; then
   export AZURE_LOCATION="$(get_random_location)"
 fi
 
+export IMAGE_TAG="DEBUG-508"
 if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG="$(git describe --tags)"
 fi

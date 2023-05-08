@@ -23,4 +23,5 @@ LABEL_FILTER="${LABEL_FILTER:-${DEFAULT_LABEL_FILTER}}"
 
 source "${REPO_ROOT}/hack/ensure-ginkgo-v2.sh"
 
+# LABEL_FILTER="DEBUG"
 ginkgo -flake-attempts 2 -skip "${SKIP_ARGS}" -label-filter "${LABEL_FILTER}" "${REPO_ROOT}"/tests/e2e/

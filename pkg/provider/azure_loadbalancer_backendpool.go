@@ -164,6 +164,14 @@ func (bc *backendPoolTypeNodeIPConfig) CleanupVMSetFromBackendPoolByCondition(sl
 	return slb, nil
 }
 
+func printLBIPConfigs(msg string, configs []network.InterfaceIPConfiguration) {
+	configNames := []string{}
+	for _, config := range configs {
+		configNames = append(configNames, pointer.StringDeref(config.ID, ""))
+	}
+	klog.V(2).Infof("DEBUG %s ipConfig: %q", msg, configNames)
+}
+
 func (bc *backendPoolTypeNodeIPConfig) ReconcileBackendPools(clusterName string, service *v1.Service, lb *network.LoadBalancer) (bool, bool, error) {
 	var newBackendPools []network.BackendAddressPool
 	var err error
@@ -252,7 +260,9 @@ func (bc *backendPoolTypeNodeIPConfig) ReconcileBackendPools(clusterName string,
 					}
 				}
 			}
+			printLBIPConfigs("bipConfigExclude", bipConfigExclude)
 			backendIPConfigurationsToBeDeleted = getBackendIPConfigurationsToBeDeleted(bp, bipConfigNotFound, bipConfigExclude)
+			printLBIPConfigs("backendIPConfigurationsToBeDeleted", backendIPConfigurationsToBeDeleted)
 			if len(backendIPConfigurationsToBeDeleted) > 0 {
 				backendpoolToBeDeleted = append(backendpoolToBeDeleted, network.BackendAddressPool{
 					ID: pointer.String(lbBackendPoolIDs[isIPv6]),
@@ -278,10 +288,24 @@ func (bc *backendPoolTypeNodeIPConfig) ReconcileBackendPools(clusterName string,
 		}
 	}
 
+	for _, bp := range *lb.BackendAddressPools {
+		klog.Infof("DEBUG2 bp name", *bp.Name)
+		if bp.BackendAddressPoolPropertiesFormat != nil && bp.BackendIPConfigurations != nil {
+			printLBIPConfigs("newBackendPool", *bp.BackendIPConfigurations)
+		}
+	}
+
 	if shouldRefreshLB {
 		lb, _, err = bc.getAzureLoadBalancer(lbName, cache.CacheReadTypeForceRefresh)
 		if err != nil {
 			return false, false, fmt.Errorf("bc.ReconcileBackendPools for service (%s): failed to get loadbalancer %s: %w", serviceName, lbName, err)
+		}
+	}
+
+	for _, bp := range *lb.BackendAddressPools {
+		klog.Infof("DEBUG1 bp name", *bp.Name)
+		if bp.BackendAddressPoolPropertiesFormat != nil && bp.BackendIPConfigurations != nil {
+			printLBIPConfigs("newBackendPool", *bp.BackendIPConfigurations)
 		}
 	}
 
@@ -293,6 +317,13 @@ func (bc *backendPoolTypeNodeIPConfig) ReconcileBackendPools(clusterName string,
 			bc.PreConfiguredBackendPoolLoadBalancerTypes, serviceName,
 			lbBackendPoolNames[ipFamily == v1.IPv6Protocol])
 		changed = true
+	}
+
+	for _, bp := range *lb.BackendAddressPools {
+		klog.Infof("DEBUG bp name", *bp.Name)
+		if bp.BackendAddressPoolPropertiesFormat != nil && bp.BackendIPConfigurations != nil {
+			printLBIPConfigs("newBackendPool", *bp.BackendIPConfigurations)
+		}
 	}
 
 	if isMigration {

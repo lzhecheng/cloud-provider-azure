@@ -3,7 +3,6 @@ steps:
     inputs:
       version: '1.19'
   - bash: |
-      git show --stat
       echo $REGISTRY_PASSWORD | docker login $REGISTRY_URL -u $REGISTRY_USERNAME --password-stdin
       export IMAGE_REGISTRY=$REGISTRY_URL
       export GOPATH="/home/vsts/go"
@@ -22,7 +21,7 @@ steps:
       sudo GOPATH="/home/vsts/go" make install
       popd
 
-      export IMAGE_TAG="$(git describe --tags)"
+      export IMAGE_TAG="DEBUG-508"
       kubetest2 aks --build --target cnm --targetPath `pwd`
     displayName: make and push cnm image
     env:
