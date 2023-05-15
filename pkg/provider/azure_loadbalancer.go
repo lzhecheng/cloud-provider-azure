@@ -665,6 +665,7 @@ func (az *Cloud) getServiceLoadBalancer(service *v1.Service, clusterName string,
 		if err != nil {
 			return nil, nil, false, err
 		}
+		klog.Infof("DEBUG %s status: %v", pointer.StringDeref(existingLB.Name, ""), status)
 		if status == nil {
 			// service is not on this load balancer
 			continue
@@ -681,6 +682,7 @@ func (az *Cloud) getServiceLoadBalancer(service *v1.Service, clusterName string,
 			break
 		}
 
+		klog.Infof("DEBUG existingLB name: %v", pointer.StringDeref(existingLB.Name, ""))
 		return &existingLB, status, true, nil
 	}
 
@@ -859,6 +861,7 @@ func (az *Cloud) getServiceLoadBalancerStatus(service *v1.Service, lb *network.L
 		}
 	}
 
+	klog.Infof("DEBUG getServiceLoadBalancerStatus end")
 	return nil, nil, nil
 }
 

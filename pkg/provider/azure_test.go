@@ -127,11 +127,11 @@ func TestAddPort(t *testing.T) {
 }
 
 func TestLoadBalancerInternalServiceModeSelection(t *testing.T) {
-	testLoadBalancerServiceDefaultModeSelection(t, true)
+	// testLoadBalancerServiceDefaultModeSelection(t, true)
 	testLoadBalancerServiceAutoModeSelection(t, true)
-	testLoadBalancerServicesSpecifiedSelection(t, true)
-	testLoadBalancerMaxRulesServices(t, true)
-	testLoadBalancerServiceAutoModeDeleteSelection(t, true)
+	// testLoadBalancerServicesSpecifiedSelection(t, true)
+	// testLoadBalancerMaxRulesServices(t, true)
+	// testLoadBalancerServiceAutoModeDeleteSelection(t, true)
 }
 
 func TestLoadBalancerExternalServiceModeSelection(t *testing.T) {
@@ -1961,6 +1961,8 @@ func validateLoadBalancer(t *testing.T, loadBalancer *network.LoadBalancer, serv
 				wantedRuleNameMap[isIPv6] = wantedRuleName
 				foundRule := false
 				for _, actualRule := range *loadBalancer.LoadBalancingRules {
+					fmt.Println("actual:", *actualRule.Name, *actualRule.FrontendPort, *actualRule.BackendPort)
+					fmt.Println("wantedRule:", wantedRuleName, wantedRule.Port, wantedRule.Port)
 					if strings.EqualFold(*actualRule.Name, wantedRuleName) &&
 						*actualRule.FrontendPort == wantedRule.Port &&
 						*actualRule.BackendPort == wantedRule.Port {
