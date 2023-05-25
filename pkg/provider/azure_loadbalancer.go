@@ -66,10 +66,10 @@ func (az *Cloud) existsPip(clusterName string, service *v1.Service) bool {
 		return existingPip
 	}
 
-	if v4Enabled && !existsPipSingleStack(false) {
+	if v4Enabled && !existsPipSingleStack(IsIPv4) {
 		return false
 	}
-	if v6Enabled && !existsPipSingleStack(true) {
+	if v6Enabled && !existsPipSingleStack(IsIPv6) {
 		return false
 	}
 	return true
@@ -1569,8 +1569,8 @@ func (az *Cloud) reconcileLoadBalancer(clusterName string, service *v1.Service, 
 		serviceName, lbResourceGroup, lbName, wantLb)
 	lbFrontendIPConfigNames := az.getFrontendIPConfigNames(service)
 	lbFrontendIPConfigIDs := map[bool]string{
-		false: az.getFrontendIPConfigID(lbName, lbFrontendIPConfigNames[false]),
-		true:  az.getFrontendIPConfigID(lbName, lbFrontendIPConfigNames[true]),
+		IsIPv4: az.getFrontendIPConfigID(lbName, lbFrontendIPConfigNames[IsIPv4]),
+		IsIPv6: az.getFrontendIPConfigID(lbName, lbFrontendIPConfigNames[IsIPv6]),
 	}
 	dirtyLb := false
 
@@ -1628,7 +1628,7 @@ func (az *Cloud) reconcileLoadBalancer(clusterName string, service *v1.Service, 
 		if err = az.checkLoadBalancerResourcesConflicts(lb, lbFrontendIPConfigIDs[false], service); err != nil {
 			return nil, err
 		}
-		if err := getExpectedLBRule(false); err != nil {
+		if err := getExpectedLBRule(IsIPv4); err != nil {
 			return nil, err
 		}
 	}
@@ -1636,7 +1636,7 @@ func (az *Cloud) reconcileLoadBalancer(clusterName string, service *v1.Service, 
 		if err = az.checkLoadBalancerResourcesConflicts(lb, lbFrontendIPConfigIDs[true], service); err != nil {
 			return nil, err
 		}
-		if err := getExpectedLBRule(true); err != nil {
+		if err := getExpectedLBRule(IsIPv6); err != nil {
 			return nil, err
 		}
 	}
@@ -1836,12 +1836,12 @@ func (az *Cloud) reconcileFrontendIPConfigs(clusterName string, service *v1.Serv
 	}
 	v4Enabled, v6Enabled := getIPFamiliesEnabled(service)
 	if v4Enabled {
-		if err := handleFrontendIPConfig(false); err != nil {
+		if err := handleFrontendIPConfig(IsIPv4); err != nil {
 			return ownedFIPConfigs, toDeleteConfigs, changedTotal, err
 		}
 	}
 	if v6Enabled {
-		if err := handleFrontendIPConfig(true); err != nil {
+		if err := handleFrontendIPConfig(IsIPv6); err != nil {
 			return ownedFIPConfigs, toDeleteConfigs, changedTotal, err
 		}
 	}
