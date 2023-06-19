@@ -127,21 +127,23 @@ func newScaleSet(ctx context.Context, az *Cloud) (VMSet, error) {
 		lockMap:         newLockMap(),
 	}
 
-	if !ss.DisableAvailabilitySetNodes || ss.EnableVmssFlexNodes {
-		ss.nonVmssUniformNodesCache, err = ss.newNonVmssUniformNodesCache()
+	if !az.Config.DisableAPICallCache {
+		if !ss.DisableAvailabilitySetNodes || ss.EnableVmssFlexNodes {
+			ss.nonVmssUniformNodesCache, err = ss.newNonVmssUniformNodesCache()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		ss.vmssCache, err = ss.newVMSSCache(ctx)
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	ss.vmssCache, err = ss.newVMSSCache(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	ss.vmssVMCache, err = ss.newVMSSVirtualMachinesCache()
-	if err != nil {
-		return nil, err
+		ss.vmssVMCache, err = ss.newVMSSVirtualMachinesCache()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return ss, nil
@@ -149,11 +151,20 @@ func newScaleSet(ctx context.Context, az *Cloud) (VMSet, error) {
 
 func (ss *ScaleSet) getVMSS(vmssName string, crt azcache.AzureCacheReadType) (*compute.VirtualMachineScaleSet, error) {
 	getter := func(vmssName string) (*compute.VirtualMachineScaleSet, error) {
-		cached, err := ss.vmssCache.Get(consts.VMSSKey, crt)
-		if err != nil {
-			return nil, err
+		var vmsses *sync.Map
+		var err error
+		if ss.Cloud.Config.DisableAPICallCache {
+			vmsses, _, err = ss.vmssClientList(context.Background())
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			cached, err := ss.vmssCache.Get(consts.VMSSKey, crt)
+			if err != nil {
+				return nil, err
+			}
+			vmsses = cached.(*sync.Map)
 		}
-		vmsses := cached.(*sync.Map)
 		if vmss, ok := vmsses.Load(vmssName); ok {
 			result := vmss.(*VMSSEntry)
 			return result.VMSS, nil
@@ -170,8 +181,10 @@ func (ss *ScaleSet) getVMSS(vmssName string, crt azcache.AzureCacheReadType) (*c
 		return vmss, nil
 	}
 
-	klog.V(2).Infof("Couldn't find VMSS with name %s, refreshing the cache", vmssName)
-	_ = ss.vmssCache.Delete(consts.VMSSKey)
+	if ss.Cloud.Config.DisableAPICallCache {
+		klog.V(2).Infof("Couldn't find VMSS with name %s, refreshing the cache", vmssName)
+		_ = ss.vmssCache.Delete(consts.VMSSKey)
+	}
 	vmss, err = getter(vmssName)
 	if err != nil {
 		return nil, err
@@ -194,7 +207,7 @@ func (ss *ScaleSet) getVmssVMByNodeIdentity(node *nodeIdentity, crt azcache.Azur
 
 	getter := func(crt azcache.AzureCacheReadType) (*virtualmachine.VirtualMachine, bool, error) {
 		var found bool
-		virtualMachines, err := ss.getVMSSVMsFromCache(node.resourceGroup, node.vmssName, crt)
+		virtualMachines, err := ss.getVMSSVMs(node.resourceGroup, node.vmssName, crt)
 		if err != nil {
 			return nil, found, err
 		}
@@ -330,7 +343,7 @@ func (ss *ScaleSet) GetProvisioningStateByNodeName(name string) (provisioningSta
 // The node must belong to one of scale sets.
 func (ss *ScaleSet) getVmssVMByInstanceID(resourceGroup, scaleSetName, instanceID string, crt azcache.AzureCacheReadType) (*compute.VirtualMachineScaleSetVM, error) {
 	getter := func(crt azcache.AzureCacheReadType) (vm *compute.VirtualMachineScaleSetVM, found bool, err error) {
-		virtualMachines, err := ss.getVMSSVMsFromCache(resourceGroup, scaleSetName, crt)
+		virtualMachines, err := ss.getVMSSVMs(resourceGroup, scaleSetName, crt)
 		if err != nil {
 			return nil, false, err
 		}
@@ -790,12 +803,21 @@ func (ss *ScaleSet) getNodeIdentityByNodeName(nodeName string, crt azcache.Azure
 			nodeName: nodeName,
 		}
 
-		cached, err := ss.vmssCache.Get(consts.VMSSKey, crt)
-		if err != nil {
-			return nil, err
+		var vmsses *sync.Map
+		var err error
+		if ss.Cloud.Config.DisableAPICallCache {
+			vmsses, _, err = ss.vmssClientList(context.Background())
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			cached, err := ss.vmssCache.Get(consts.VMSSKey, crt)
+			if err != nil {
+				return nil, err
+			}
+			vmsses = cached.(*sync.Map)
 		}
 
-		vmsses := cached.(*sync.Map)
 		vmsses.Range(func(key, value interface{}) bool {
 			v := value.(*VMSSEntry)
 			if v.VMSS.Name == nil {
@@ -1642,12 +1664,21 @@ func (ss *ScaleSet) ensureBackendPoolDeletedFromVMSS(backendPoolIDs []string, vm
 	if !ss.useStandardLoadBalancer() {
 		found := false
 
-		cachedUniform, err := ss.vmssCache.Get(consts.VMSSKey, azcache.CacheReadTypeDefault)
-		if err != nil {
-			klog.Errorf("ensureBackendPoolDeletedFromVMSS: failed to get vmss uniform from cache: %v", err)
-			return err
+		var vmssUniformMap *sync.Map
+		var err error
+		if ss.Cloud.Config.DisableAPICallCache {
+			vmssUniformMap, _, err = ss.vmssClientList(context.Background())
+			if err != nil {
+				return err
+			}
+		} else {
+			cachedUniform, err := ss.vmssCache.Get(consts.VMSSKey, azcache.CacheReadTypeDefault)
+			if err != nil {
+				klog.Errorf("ensureBackendPoolDeletedFromVMSS: failed to get vmss uniform from cache: %v", err)
+				return err
+			}
+			vmssUniformMap = cachedUniform.(*sync.Map)
 		}
-		vmssUniformMap := cachedUniform.(*sync.Map)
 
 		vmssUniformMap.Range(func(key, value interface{}) bool {
 			vmssEntry := value.(*VMSSEntry)
@@ -1701,13 +1732,23 @@ func (ss *ScaleSet) ensureBackendPoolDeletedFromVmssUniform(backendPoolIDs []str
 	vmssNamesMap := make(map[string]bool)
 	// the standard load balancer supports multiple vmss in its backend while the basic sku doesn't
 	if ss.useStandardLoadBalancer() {
-		cachedUniform, err := ss.vmssCache.Get(consts.VMSSKey, azcache.CacheReadTypeDefault)
-		if err != nil {
-			klog.Errorf("ensureBackendPoolDeletedFromVMSS: failed to get vmss uniform from cache: %v", err)
-			return err
+		var vmssUniformMap *sync.Map
+		var err error
+		if ss.Cloud.Config.DisableAPICallCache {
+			vmssUniformMap, _, err = ss.vmssClientList(context.Background())
+			if err != nil {
+				return err
+			}
+		} else {
+			cachedUniform, err := ss.vmssCache.Get(consts.VMSSKey, azcache.CacheReadTypeDefault)
+			if err != nil {
+				klog.Errorf("ensureBackendPoolDeletedFromVMSS: failed to get vmss uniform from cache: %v", err)
+				return err
+			}
+
+			vmssUniformMap = cachedUniform.(*sync.Map)
 		}
 
-		vmssUniformMap := cachedUniform.(*sync.Map)
 		var errorList []error
 		walk := func(key, value interface{}) bool {
 			var vmss *compute.VirtualMachineScaleSet

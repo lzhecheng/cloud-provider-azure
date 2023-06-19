@@ -22,6 +22,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2022-08-01/compute"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2022-07-01/network"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/pointer"
 
+	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/loadbalancerclient/mockloadbalancerclient"
+	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/privatelinkserviceclient/mockprivatelinkserviceclient"
 	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/publicipclient/mockpublicipclient"
+	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/routetableclient/mockroutetableclient"
+	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/securitygroupclient/mocksecuritygroupclient"
+	"sigs.k8s.io/cloud-provider-azure/pkg/azureclients/vmclient/mockvmclient"
 	azcache "sigs.k8s.io/cloud-provider-azure/pkg/cache"
 	"sigs.k8s.io/cloud-provider-azure/pkg/consts"
 	"sigs.k8s.io/cloud-provider-azure/pkg/retry"
@@ -401,6 +407,186 @@ func TestListPIP(t *testing.T) {
 				assert.ElementsMatch(t, test.existingPIPs, pips)
 			} else {
 				assert.ElementsMatch(t, test.pipCache, pips)
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestPIPClientList(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc         string
+		existingPIPs []network.PublicIPAddress
+	}{
+		{
+			desc:         "should return data from ARM list call",
+			existingPIPs: []network.PublicIPAddress{{Name: pointer.String("pip")}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockPIPsClient := az.PublicIPAddressesClient.(*mockpublicipclient.MockInterface)
+			mockPIPsClient.EXPECT().List(gomock.Any(), az.ResourceGroup).Return(test.existingPIPs, nil).Times(1)
+			pips, err := az.pipClientList(az.ResourceGroup)
+			assert.NotNil(t, pips)
+			assert.ElementsMatch(t, test.existingPIPs, *pips)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestLBClientGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc       string
+		existingLB network.LoadBalancer
+	}{
+		{
+			desc:       "should return data from ARM list call",
+			existingLB: network.LoadBalancer{Name: pointer.String("lb")},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockLBClient := az.LoadBalancerClient.(*mockloadbalancerclient.MockInterface)
+			mockLBClient.EXPECT().Get(gomock.Any(), az.ResourceGroup, "lb", "").Return(test.existingLB, nil).Times(1)
+			lb, err := az.lbClientGet("lb")
+			assert.NotNil(t, lb)
+			assert.Equal(t, test.existingLB, *(lb.(*network.LoadBalancer)))
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestPLSClientGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc         string
+		fipConfigID  string
+		existingPLSs []network.PrivateLinkService
+	}{
+		{
+			desc: "should return data from ARM list call",
+			existingPLSs: []network.PrivateLinkService{
+				{
+					Name: pointer.String("pls"),
+					PrivateLinkServiceProperties: &network.PrivateLinkServiceProperties{
+						LoadBalancerFrontendIPConfigurations: &[]network.FrontendIPConfiguration{
+							{ID: pointer.String("fipConfigID")},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockPLSClient := az.PrivateLinkServiceClient.(*mockprivatelinkserviceclient.MockInterface)
+			mockPLSClient.EXPECT().List(gomock.Any(), az.PrivateLinkServiceResourceGroup).Return(test.existingPLSs, nil).Times(1)
+			pls, err := az.plsClientGet("fipConfigID")
+			assert.NotNil(t, pls)
+			assert.Equal(t, test.existingPLSs[0], *(pls.(*network.PrivateLinkService)))
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestNSGClientGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc        string
+		existingNSG network.SecurityGroup
+	}{
+		{
+			desc:        "should return data from ARM list call",
+			existingNSG: network.SecurityGroup{Name: pointer.String("nsg")},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockNSGClient := az.SecurityGroupsClient.(*mocksecuritygroupclient.MockInterface)
+			mockNSGClient.EXPECT().Get(gomock.Any(), az.SecurityGroupResourceGroup, "nsg", "").Return(test.existingNSG, nil).Times(1)
+			nsg, err := az.nsgClientGet("nsg")
+			assert.NotNil(t, nsg)
+			assert.Equal(t, test.existingNSG, *(nsg.(*network.SecurityGroup)))
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestRouteTableClientGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc       string
+		existingRT network.RouteTable
+	}{
+		{
+			desc:       "should return data from ARM list call",
+			existingRT: network.RouteTable{Name: pointer.String("rt")},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockRTClient := az.RouteTablesClient.(*mockroutetableclient.MockInterface)
+			mockRTClient.EXPECT().Get(gomock.Any(), az.RouteTableResourceGroup, "rt", "").Return(test.existingRT, nil).Times(1)
+			rt, err := az.routeTableClientGet("rt")
+			assert.NotNil(t, rt)
+			assert.Equal(t, test.existingRT, *(rt.(*network.RouteTable)))
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestVMClientGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc        string
+		existingVM  compute.VirtualMachine
+		returnEmpty bool
+	}{
+		{
+			desc:       "should return data from ARM list call",
+			existingVM: compute.VirtualMachine{Name: pointer.String("vm")},
+		},
+		{
+			desc: "VM under deletion",
+			existingVM: compute.VirtualMachine{
+				Name: pointer.String("vm"),
+				VirtualMachineProperties: &compute.VirtualMachineProperties{
+					ProvisioningState: pointer.String(consts.ProvisioningStateDeleting),
+				},
+			},
+			returnEmpty: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			az := GetTestCloud(ctrl)
+			mockVMClient := az.VirtualMachinesClient.(*mockvmclient.MockInterface)
+			mockVMClient.EXPECT().Get(gomock.Any(), az.ResourceGroup, "vm", compute.InstanceViewTypesInstanceView).Return(test.existingVM, nil).Times(1)
+			vm, err := az.vmClientGet("vm")
+			if test.returnEmpty {
+				assert.Nil(t, vm)
+			} else {
+				assert.Equal(t, test.existingVM, *(vm.(*compute.VirtualMachine)))
 			}
 			assert.NoError(t, err)
 		})

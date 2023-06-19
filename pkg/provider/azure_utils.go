@@ -22,6 +22,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2022-07-01/network"
 
@@ -280,13 +281,56 @@ func getVMSSVMCacheKey(resourceGroup, vmssName string) string {
 	return cacheKey
 }
 
-// isNodeInVMSSVMCache check whether nodeName is in vmssVMCache
-func isNodeInVMSSVMCache(nodeName string, vmssVMCache *azcache.TimedCache) bool {
-	if vmssVMCache == nil {
-		return false
+// isNodeInVMSSVM check whether nodeName is in vmssVMCache
+func (ss *ScaleSet) isNodeInVMSSVM(nodeName string) (bool, error) {
+	var isInVMSSVM bool
+
+	// Search from API calls
+	if ss.Cloud.Config.DisableAPICallCache {
+		allResourceGroups, err := ss.GetResourceGroups()
+		if err != nil {
+			return false, err
+		}
+
+		ctx, cancel := getContextWithCancel()
+		defer cancel()
+		vmssVirtualMachinesCacheTTL := time.Duration(ss.Config.VmssVirtualMachinesCacheTTLInSeconds) * time.Second
+		for _, rg := range allResourceGroups.UnsortedList() {
+			vmsses, rerr := ss.Cloud.VirtualMachineScaleSetsClient.List(ctx, rg)
+			if rerr != nil {
+				return false, rerr.Error()
+			}
+			for _, vmss := range vmsses {
+				vmssList, err := ss.vmssVMsClientList(pointer.StringDeref(vmss.Name, ""), vmssVirtualMachinesCacheTTL)
+				if err != nil {
+					return false, err
+				}
+				vmssList.Range(func(vmName, _ interface{}) bool {
+					if vmName != nil && vmName.(string) == nodeName {
+						isInVMSSVM = true
+						return false
+					}
+					return true
+				})
+
+				if isInVMSSVM {
+					break
+				}
+			}
+
+			if isInVMSSVM {
+				break
+			}
+		}
+
+		return isInVMSSVM, nil
 	}
 
-	var isInCache bool
+	// Search in cache
+	vmssVMCache := ss.vmssVMCache
+	if vmssVMCache == nil {
+		return false, nil
+	}
 
 	vmssVMCache.Lock.Lock()
 	defer vmssVMCache.Lock.Unlock()
@@ -299,7 +343,7 @@ func isNodeInVMSSVMCache(nodeName string, vmssVMCache *azcache.TimedCache) bool 
 			if data != nil {
 				data.(*sync.Map).Range(func(vmName, _ interface{}) bool {
 					if vmName != nil && vmName.(string) == nodeName {
-						isInCache = true
+						isInVMSSVM = true
 						return false
 					}
 					return true
@@ -308,12 +352,12 @@ func isNodeInVMSSVMCache(nodeName string, vmssVMCache *azcache.TimedCache) bool 
 			e.Lock.Unlock()
 		}
 
-		if isInCache {
+		if isInVMSSVM {
 			break
 		}
 	}
 
-	return isInCache
+	return isInVMSSVM, nil
 }
 
 func extractVmssVMName(name string) (string, string, error) {

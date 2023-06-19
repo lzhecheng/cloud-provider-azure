@@ -333,6 +333,9 @@ func (fs *FlexScaleSet) getVmssFlexByName(vmssFlexName string) (*compute.Virtual
 }
 
 func (fs *FlexScaleSet) DeleteCacheForNode(nodeName string) error {
+	if fs.Config.DisableAPICallCache {
+		return nil
+	}
 	vmssFlexID, err := fs.getNodeVmssFlexID(nodeName)
 	if err != nil {
 		klog.Errorf("getNodeVmssFlexID(%s) failed with %v", nodeName, err)

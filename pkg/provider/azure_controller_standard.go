@@ -121,6 +121,9 @@ func (as *availabilitySet) AttachDisk(ctx context.Context, nodeName types.NodeNa
 }
 
 func (as *availabilitySet) DeleteCacheForNode(nodeName string) error {
+	if as.Config.DisableAPICallCache {
+		return nil
+	}
 	err := as.cloud.vmCache.Delete(nodeName)
 	if err == nil {
 		klog.V(2).Infof("DeleteCacheForNode(%s) successfully", nodeName)
@@ -265,6 +268,9 @@ func (as *availabilitySet) UpdateVMAsync(ctx context.Context, nodeName types.Nod
 }
 
 func (as *availabilitySet) updateCache(nodeName string, vm *compute.VirtualMachine) {
+	if as.Config.DisableAPICallCache {
+		return
+	}
 	if as.common.DisableUpdateCache {
 		return
 	}

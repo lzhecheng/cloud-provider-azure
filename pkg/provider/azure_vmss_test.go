@@ -953,7 +953,7 @@ func TestGetVmssVMByNodeIdentity(t *testing.T) {
 			mockVMSSVMClient.EXPECT().List(gomock.Any(), ss.ResourceGroup, testVMSSName, gomock.Any()).Return(expectedVMSSVMs, nil).AnyTimes()
 
 			cacheKey := getVMSSVMCacheKey(ss.ResourceGroup, testVMSSName)
-			virtualMachines, err := ss.getVMSSVMsFromCache(ss.ResourceGroup, testVMSSName, azcache.CacheReadTypeDefault)
+			virtualMachines, err := ss.getVMSSVMs(ss.ResourceGroup, testVMSSName, azcache.CacheReadTypeDefault)
 			assert.Nil(t, err)
 			for _, vm := range test.goneVMList {
 				entry := VMSSVirtualMachineEntry{
@@ -976,7 +976,7 @@ func TestGetVmssVMByNodeIdentity(t *testing.T) {
 				assert.Equal(t, test.goneVMExpectedErr, err)
 			}
 
-			virtualMachines, err = ss.getVMSSVMsFromCache(ss.ResourceGroup, testVMSSName, azcache.CacheReadTypeDefault)
+			virtualMachines, err = ss.getVMSSVMs(ss.ResourceGroup, testVMSSName, azcache.CacheReadTypeDefault)
 			assert.Nil(t, err)
 
 			for _, vm := range test.goneVMList {

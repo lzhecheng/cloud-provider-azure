@@ -500,36 +500,40 @@ type AvailabilitySetEntry struct {
 	ResourceGroup string
 }
 
+func (as *availabilitySet) vmasClientList() (*sync.Map, error) {
+	localSyncMap := &sync.Map{}
+
+	allResourceGroups, err := as.GetResourceGroups()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, resourceGroup := range allResourceGroups.UnsortedList() {
+		allAvailabilitySets, rerr := as.AvailabilitySetsClient.List(context.Background(), resourceGroup)
+		if rerr != nil {
+			klog.Errorf("AvailabilitySetsClient.List failed: %v", rerr)
+			return nil, rerr.Error()
+		}
+
+		for i := range allAvailabilitySets {
+			vmas := allAvailabilitySets[i]
+			if strings.EqualFold(pointer.StringDeref(vmas.Name, ""), "") {
+				klog.Warning("failed to get the name of the VMAS")
+				continue
+			}
+			localSyncMap.Store(pointer.StringDeref(vmas.Name, ""), &AvailabilitySetEntry{
+				VMAS:          &vmas,
+				ResourceGroup: resourceGroup,
+			})
+		}
+	}
+
+	return localSyncMap, nil
+}
+
 func (as *availabilitySet) newVMASCache() (*azcache.TimedCache, error) {
-	getter := func(key string) (interface{}, error) {
-		localCache := &sync.Map{}
-
-		allResourceGroups, err := as.GetResourceGroups()
-		if err != nil {
-			return nil, err
-		}
-
-		for _, resourceGroup := range allResourceGroups.UnsortedList() {
-			allAvailabilitySets, rerr := as.AvailabilitySetsClient.List(context.Background(), resourceGroup)
-			if rerr != nil {
-				klog.Errorf("AvailabilitySetsClient.List failed: %v", rerr)
-				return nil, rerr.Error()
-			}
-
-			for i := range allAvailabilitySets {
-				vmas := allAvailabilitySets[i]
-				if strings.EqualFold(pointer.StringDeref(vmas.Name, ""), "") {
-					klog.Warning("failed to get the name of the VMAS")
-					continue
-				}
-				localCache.Store(pointer.StringDeref(vmas.Name, ""), &AvailabilitySetEntry{
-					VMAS:          &vmas,
-					ResourceGroup: resourceGroup,
-				})
-			}
-		}
-
-		return localCache, nil
+	getter := func(_ string) (interface{}, error) {
+		return as.vmasClientList()
 	}
 
 	if as.Config.AvailabilitySetsCacheTTLInSeconds == 0 {
@@ -545,10 +549,12 @@ func newAvailabilitySet(az *Cloud) (VMSet, error) {
 		Cloud: az,
 	}
 
-	var err error
-	as.vmasCache, err = as.newVMASCache()
-	if err != nil {
-		return nil, err
+	if !az.Config.DisableAPICallCache {
+		var err error
+		as.vmasCache, err = as.newVMASCache()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return as, nil
@@ -1287,11 +1293,20 @@ func (as *availabilitySet) GetNodeNameByIPConfigurationID(ipConfigurationID stri
 }
 
 func (as *availabilitySet) getAvailabilitySetByNodeName(nodeName string, crt azcache.AzureCacheReadType) (*compute.AvailabilitySet, error) {
-	cached, err := as.vmasCache.Get(consts.VMASKey, crt)
-	if err != nil {
-		return nil, err
+	var vmasList *sync.Map
+	var err error
+	if as.Cloud.Config.DisableAPICallCache {
+		vmasList, err = as.vmasClientList()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cached, err := as.vmasCache.Get(consts.VMASKey, crt)
+		if err != nil {
+			return nil, err
+		}
+		vmasList = cached.(*sync.Map)
 	}
-	vmasList := cached.(*sync.Map)
 
 	if vmasList == nil {
 		klog.Warning("Couldn't get all vmas from cache")

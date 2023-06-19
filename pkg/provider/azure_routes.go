@@ -361,7 +361,9 @@ func (az *Cloud) createRouteTable() error {
 	}
 
 	// Invalidate the cache right after updating
-	_ = az.rtCache.Delete(az.RouteTableName)
+	if az.Config.DisableAPICallCache {
+		_ = az.rtCache.Delete(az.RouteTableName)
+	}
 	return nil
 }
 

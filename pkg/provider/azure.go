@@ -262,6 +262,9 @@ type Config struct {
 	// If the length is not 0, it is assumed the multiple standard load balancers mode is on. In this case,
 	// there must be one configuration named “<clustername>” or an error will be reported.
 	MultipleStandardLoadBalancerConfigurations []MultipleStandardLoadBalancerConfiguration `json:"multipleStandardLoadBalancerConfigurations,omitempty" yaml:"multipleStandardLoadBalancerConfigurations,omitempty"`
+
+	// DisableAPICallCache disables the cache for Azure API calls.
+	DisableAPICallCache bool `json:"disableAPICallCache,omitempty" yaml:"disableAPICallCache,omitempty"`
 }
 
 // MultipleStandardLoadBalancerConfiguration stores the properties regarding multiple standard load balancers.
@@ -742,6 +745,11 @@ func (az *Cloud) getPutVMSSVMBatchSize() int {
 }
 
 func (az *Cloud) initCaches() (err error) {
+	if az.Config.DisableAPICallCache {
+		klog.Infof("Azure cloud provider API call cache is disabled")
+		return nil
+	}
+
 	az.vmCache, err = az.newVMCache()
 	if err != nil {
 		return err
@@ -1134,8 +1142,10 @@ func (az *Cloud) SetInformers(informerFactory informers.SharedInformerFactory) {
 			}
 			az.updateNodeCaches(node, nil)
 
-			klog.V(4).Infof("Removing node %s from VMSet cache.", node.Name)
-			_ = az.VMSet.DeleteCacheForNode(node.Name)
+			if !az.Config.DisableAPICallCache {
+				klog.V(4).Infof("Removing node %s from VMSet cache.", node.Name)
+				_ = az.VMSet.DeleteCacheForNode(node.Name)
+			}
 		},
 	})
 	az.nodeInformerSynced = nodeInformer.HasSynced

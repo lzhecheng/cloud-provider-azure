@@ -2126,6 +2126,54 @@ func TestStandardGetNodeNameByIPConfigurationID(t *testing.T) {
 	assert.Equal(t, "agentpool1-availabilityset-00000000", asName)
 }
 
+func TestVMASClientList(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		desc          string
+		existingVMASs []compute.AvailabilitySet
+	}{
+		{
+			desc: "should return data from ARM list call",
+			existingVMASs: []compute.AvailabilitySet{
+				{
+					Name: pointer.String("vmas0"),
+				},
+				{
+					Name: pointer.String("vmas1"),
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			cloud := GetTestCloud(ctrl)
+			vmSet, err := newAvailabilitySet(cloud)
+			assert.NoError(t, err)
+			as := vmSet.(*availabilitySet)
+
+			mockVMASClient := mockvmasclient.NewMockInterface(ctrl)
+			cloud.AvailabilitySetsClient = mockVMASClient
+
+			assert.Nil(t, err)
+			mockVMASClient.EXPECT().List(gomock.Any(), "rg").Return(test.existingVMASs, nil).Times(1)
+
+			vmasList, err := as.vmasClientList()
+			assert.NoError(t, err)
+			assert.NotNil(t, vmasList)
+			vmasListResult := []compute.AvailabilitySet{}
+			vmasList.Range(func(_, value interface{}) bool {
+				vmasEntry := value.(*AvailabilitySetEntry)
+				vmas := vmasEntry.VMAS
+				vmasListResult = append(vmasListResult, *vmas)
+				return true
+			})
+			assert.Equal(t, test.existingVMASs, vmasListResult)
+		})
+	}
+}
+
 func TestGetAvailabilitySetByNodeName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

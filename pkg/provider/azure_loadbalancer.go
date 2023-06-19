@@ -422,7 +422,9 @@ func (az *Cloud) removeFrontendIPConfigurationFromLoadBalancer(lb *network.LoadB
 			klog.Errorf("removeFrontendIPConfigurationFromLoadBalancer(%s, %s, %s, %s): failed to CreateOrUpdateLB: %v", pointer.StringDeref(lb.Name, ""), pointer.StringDeref(fip.Name, ""), clusterName, service.Name, err)
 			return err
 		}
-		_ = az.lbCache.Delete(pointer.StringDeref(lb.Name, ""))
+		if !az.Config.DisableAPICallCache {
+			_ = az.lbCache.Delete(pointer.StringDeref(lb.Name, ""))
+		}
 	}
 	return nil
 }
@@ -516,7 +518,9 @@ func (az *Cloud) safeDeleteLoadBalancer(lb network.LoadBalancer, clusterName, vm
 	if rerr != nil {
 		return rerr
 	}
-	_ = az.lbCache.Delete(pointer.StringDeref(lb.Name, ""))
+	if !az.Config.DisableAPICallCache {
+		_ = az.lbCache.Delete(pointer.StringDeref(lb.Name, ""))
+	}
 
 	return nil
 }
@@ -1700,7 +1704,9 @@ func (az *Cloud) reconcileLoadBalancer(clusterName string, service *v1.Service, 
 		vmSetName := az.mapLoadBalancerNameToVMSet(lbName, clusterName)
 		// Etag would be changed when updating backend pools, so invalidate lbCache after it.
 		defer func() {
-			_ = az.lbCache.Delete(lbName)
+			if !az.Config.DisableAPICallCache {
+				_ = az.lbCache.Delete(lbName)
+			}
 		}()
 
 		if lb.LoadBalancerPropertiesFormat != nil && lb.LoadBalancerPropertiesFormat.BackendAddressPools != nil {
@@ -2695,7 +2701,9 @@ func (az *Cloud) reconcileSecurityGroup(clusterName string, service *v1.Service,
 			return nil, err
 		}
 		klog.V(10).Infof("CreateOrUpdateSecurityGroup(%q): end", *sg.Name)
-		_ = az.nsgCache.Delete(pointer.StringDeref(sg.Name, ""))
+		if !az.Config.DisableAPICallCache {
+			_ = az.nsgCache.Delete(pointer.StringDeref(sg.Name, ""))
+		}
 	}
 	return &sg, nil
 }

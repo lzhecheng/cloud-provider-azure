@@ -113,6 +113,7 @@ If more than one value is set, the order is `Managed Identity` > `Service Princi
 | loadBalancerBackendPoolConfigurationType                   | The type of the Load Balancer backend pool. Supported values are `nodeIPConfiguration` (default) and `nodeIP`                                                                                                     | Optional. Supported since v1.23.0                                                                                                     |
 | putVMSSVMBatchSize                                         | The number of requests the client sends concurrently in a batch when putting the VMSS VMs. Anything smaller than or equal to 0 means to update VMSS VMs one by one in sequence.                                   | Optional. Supported since v1.24.0.                                                                                                    |
 | enableMigrateToIPBasedBackendPoolAPI                       | Use the migration API to migrate from NIC-based to IP-based Load Balancer backend pools without downtime.                                                                                                         | Optional. Supported since v1.24.0.                                                                                                    |
+| disableAPICallCache | Disable the cache for Azure API calls | Optional. Supported since v1.28.0. |
 
 ### primaryAvailabilitySetName
 

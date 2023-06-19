@@ -17,6 +17,7 @@ limitations under the License.
 package provider
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -457,7 +458,9 @@ func TestGetVMSSVMCacheKey(t *testing.T) {
 	}
 }
 
-func TestIsNodeInVMSSVMCache(t *testing.T) {
+func TestIsNodeInVMSSVM(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
 	getter := func(key string) (interface{}, error) {
 		return nil, nil
@@ -501,8 +504,17 @@ func TestIsNodeInVMSSVMCache(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := isNodeInVMSSVMCache(test.nodeName, test.vmssVMCache)
-		assert.Equal(t, test.expectedResult, result, test.description)
+		t.Run(test.description, func(t *testing.T) {
+			c := GetTestCloud(ctrl)
+			vmSet, err := newScaleSet(context.Background(), c)
+			assert.NoError(t, err)
+			ss := vmSet.(*ScaleSet)
+			ss.vmssVMCache = test.vmssVMCache
+
+			result, err := ss.isNodeInVMSSVM(test.nodeName)
+			assert.Nil(t, err)
+			assert.Equal(t, test.expectedResult, result)
+		})
 	}
 }
 

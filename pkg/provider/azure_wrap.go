@@ -70,6 +70,15 @@ func checkResourceExistsFromError(err *retry.Error) (bool, *retry.Error) {
 // resource request in short period.
 func (az *Cloud) getVirtualMachine(nodeName types.NodeName, crt azcache.AzureCacheReadType) (vm compute.VirtualMachine, err error) {
 	vmName := string(nodeName)
+
+	if az.Config.DisableAPICallCache {
+		virtualMachine, err := az.vmClientGet(vmName)
+		if virtualMachine == nil {
+			return vm, err
+		}
+		return *(virtualMachine.(*compute.VirtualMachine)), err
+	}
+
 	cachedVM, err := az.vmCache.Get(vmName, crt)
 	if err != nil {
 		return vm, err
@@ -88,6 +97,14 @@ func (az *Cloud) getRouteTable(crt azcache.AzureCacheReadType) (routeTable netwo
 		return routeTable, false, fmt.Errorf("route table name is not configured")
 	}
 
+	if az.Config.DisableAPICallCache {
+		rt, err := az.routeTableClientGet(az.RouteTableName)
+		if rt == nil {
+			return routeTable, false, nil
+		}
+		return *(rt.(*network.RouteTable)), true, err
+	}
+
 	cachedRt, err := az.rtCache.GetWithDeepCopy(az.RouteTableName, crt)
 	if err != nil {
 		return routeTable, false, err
@@ -101,6 +118,20 @@ func (az *Cloud) getRouteTable(crt azcache.AzureCacheReadType) (routeTable netwo
 }
 
 func (az *Cloud) getPublicIPAddress(pipResourceGroup string, pipName string, crt azcache.AzureCacheReadType) (network.PublicIPAddress, bool, error) {
+	if az.Config.DisableAPICallCache {
+		ctx, cancel := getContextWithCancel()
+		defer cancel()
+		pip, err := az.PublicIPAddressesClient.Get(ctx, pipResourceGroup, pipName, "")
+		exists, rerr := checkResourceExistsFromError(err)
+		if rerr != nil {
+			return network.PublicIPAddress{}, false, rerr.Error()
+		}
+		if !exists {
+			return network.PublicIPAddress{}, false, nil
+		}
+		return pip, true, nil
+	}
+
 	cached, err := az.pipCache.Get(pipResourceGroup, crt)
 	if err != nil {
 		return network.PublicIPAddress{}, false, err
@@ -126,6 +157,11 @@ func (az *Cloud) getPublicIPAddress(pipResourceGroup string, pipName string, crt
 }
 
 func (az *Cloud) listPIP(pipResourceGroup string, crt azcache.AzureCacheReadType) ([]network.PublicIPAddress, error) {
+	if az.Config.DisableAPICallCache {
+		pipList, err := az.pipClientList(pipResourceGroup)
+		return *pipList, err
+	}
+
 	cached, err := az.pipCache.Get(pipResourceGroup, crt)
 	if err != nil {
 		return nil, err
@@ -163,6 +199,11 @@ func (az *Cloud) getSubnet(virtualNetworkName string, subnetName string) (networ
 }
 
 func (az *Cloud) getAzureLoadBalancer(name string, crt azcache.AzureCacheReadType) (lb *network.LoadBalancer, exists bool, err error) {
+	if az.Config.DisableAPICallCache {
+		lb, err := az.lbClientGet(name)
+		return lb.(*network.LoadBalancer), err == nil, err
+	}
+
 	cachedLB, err := az.lbCache.GetWithDeepCopy(name, crt)
 	if err != nil {
 		return lb, false, err
@@ -180,6 +221,10 @@ func (az *Cloud) getSecurityGroup(crt azcache.AzureCacheReadType) (network.Secur
 	if az.SecurityGroupName == "" {
 		return nsg, fmt.Errorf("securityGroupName is not configured")
 	}
+	if az.Config.DisableAPICallCache {
+		nsg, err := az.nsgClientGet(az.SecurityGroupName)
+		return *(nsg.(*network.SecurityGroup)), err
+	}
 
 	securityGroup, err := az.nsgCache.GetWithDeepCopy(az.SecurityGroupName, crt)
 	if err != nil {
@@ -194,6 +239,11 @@ func (az *Cloud) getSecurityGroup(crt azcache.AzureCacheReadType) (network.Secur
 }
 
 func (az *Cloud) getPrivateLinkService(frontendIPConfigID *string, crt azcache.AzureCacheReadType) (pls network.PrivateLinkService, err error) {
+	if az.Config.DisableAPICallCache {
+		pls, err := az.plsClientGet(*frontendIPConfigID)
+		return *(pls.(*network.PrivateLinkService)), err
+	}
+
 	cachedPLS, err := az.plsCache.GetWithDeepCopy(*frontendIPConfigID, crt)
 	if err != nil {
 		return pls, err
@@ -201,40 +251,44 @@ func (az *Cloud) getPrivateLinkService(frontendIPConfigID *string, crt azcache.A
 	return *(cachedPLS.(*network.PrivateLinkService)), nil
 }
 
+func (az *Cloud) vmClientGet(name string) (interface{}, error) {
+	// Currently InstanceView request are used by azure_zones, while the calls come after non-InstanceView
+	// request. If we first send an InstanceView request and then a non InstanceView request, the second
+	// request will still hit throttling. This is what happens now for cloud controller manager: In this
+	// case we do get instance view every time to fulfill the azure_zones requirement without hitting
+	// throttling.
+	// Consider adding separate parameter for controlling 'InstanceView' once node update issue #56276 is fixed
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+
+	resourceGroup, err := az.GetNodeResourceGroup(name)
+	if err != nil {
+		return nil, err
+	}
+
+	vm, verr := az.VirtualMachinesClient.Get(ctx, resourceGroup, name, compute.InstanceViewTypesInstanceView)
+	exists, rerr := checkResourceExistsFromError(verr)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	if !exists {
+		klog.V(2).Infof("Virtual machine %q not found", name)
+		return nil, nil
+	}
+
+	if vm.VirtualMachineProperties != nil &&
+		strings.EqualFold(pointer.StringDeref(vm.VirtualMachineProperties.ProvisioningState, ""), string(consts.ProvisioningStateDeleting)) {
+		klog.V(2).Infof("Virtual machine %q is under deleting", name)
+		return nil, nil
+	}
+
+	return &vm, nil
+}
+
 func (az *Cloud) newVMCache() (*azcache.TimedCache, error) {
 	getter := func(key string) (interface{}, error) {
-		// Currently InstanceView request are used by azure_zones, while the calls come after non-InstanceView
-		// request. If we first send an InstanceView request and then a non InstanceView request, the second
-		// request will still hit throttling. This is what happens now for cloud controller manager: In this
-		// case we do get instance view every time to fulfill the azure_zones requirement without hitting
-		// throttling.
-		// Consider adding separate parameter for controlling 'InstanceView' once node update issue #56276 is fixed
-		ctx, cancel := getContextWithCancel()
-		defer cancel()
-
-		resourceGroup, err := az.GetNodeResourceGroup(key)
-		if err != nil {
-			return nil, err
-		}
-
-		vm, verr := az.VirtualMachinesClient.Get(ctx, resourceGroup, key, compute.InstanceViewTypesInstanceView)
-		exists, rerr := checkResourceExistsFromError(verr)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-
-		if !exists {
-			klog.V(2).Infof("Virtual machine %q not found", key)
-			return nil, nil
-		}
-
-		if vm.VirtualMachineProperties != nil &&
-			strings.EqualFold(pointer.StringDeref(vm.VirtualMachineProperties.ProvisioningState, ""), string(consts.ProvisioningStateDeleting)) {
-			klog.V(2).Infof("Virtual machine %q is under deleting", key)
-			return nil, nil
-		}
-
-		return &vm, nil
+		return az.vmClientGet(key)
 	}
 
 	if az.VMCacheTTLInSeconds == 0 {
@@ -243,23 +297,27 @@ func (az *Cloud) newVMCache() (*azcache.TimedCache, error) {
 	return azcache.NewTimedcache(time.Duration(az.VMCacheTTLInSeconds)*time.Second, getter)
 }
 
+func (az *Cloud) lbClientGet(name string) (interface{}, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+
+	lb, err := az.LoadBalancerClient.Get(ctx, az.getLoadBalancerResourceGroup(), name, "")
+	exists, rerr := checkResourceExistsFromError(err)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	if !exists {
+		klog.V(2).Infof("Load balancer %q not found", name)
+		return nil, nil
+	}
+
+	return &lb, nil
+}
+
 func (az *Cloud) newLBCache() (*azcache.TimedCache, error) {
 	getter := func(key string) (interface{}, error) {
-		ctx, cancel := getContextWithCancel()
-		defer cancel()
-
-		lb, err := az.LoadBalancerClient.Get(ctx, az.getLoadBalancerResourceGroup(), key, "")
-		exists, rerr := checkResourceExistsFromError(err)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-
-		if !exists {
-			klog.V(2).Infof("Load balancer %q not found", key)
-			return nil, nil
-		}
-
-		return &lb, nil
+		return az.lbClientGet(key)
 	}
 
 	if az.LoadBalancerCacheTTLInSeconds == 0 {
@@ -268,22 +326,26 @@ func (az *Cloud) newLBCache() (*azcache.TimedCache, error) {
 	return azcache.NewTimedcache(time.Duration(az.LoadBalancerCacheTTLInSeconds)*time.Second, getter)
 }
 
+func (az *Cloud) nsgClientGet(name string) (interface{}, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+	nsg, err := az.SecurityGroupsClient.Get(ctx, az.SecurityGroupResourceGroup, name, "")
+	exists, rerr := checkResourceExistsFromError(err)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	if !exists {
+		klog.V(2).Infof("Security group %q not found", name)
+		return nil, nil
+	}
+
+	return &nsg, nil
+}
+
 func (az *Cloud) newNSGCache() (*azcache.TimedCache, error) {
 	getter := func(key string) (interface{}, error) {
-		ctx, cancel := getContextWithCancel()
-		defer cancel()
-		nsg, err := az.SecurityGroupsClient.Get(ctx, az.SecurityGroupResourceGroup, key, "")
-		exists, rerr := checkResourceExistsFromError(err)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-
-		if !exists {
-			klog.V(2).Infof("Security group %q not found", key)
-			return nil, nil
-		}
-
-		return &nsg, nil
+		return az.nsgClientGet(key)
 	}
 
 	if az.NsgCacheTTLInSeconds == 0 {
@@ -292,28 +354,44 @@ func (az *Cloud) newNSGCache() (*azcache.TimedCache, error) {
 	return azcache.NewTimedcache(time.Duration(az.NsgCacheTTLInSeconds)*time.Second, getter)
 }
 
+func (az *Cloud) routeTableClientGet(name string) (interface{}, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+	rt, err := az.RouteTablesClient.Get(ctx, az.RouteTableResourceGroup, name, "")
+	exists, rerr := checkResourceExistsFromError(err)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	if !exists {
+		klog.V(2).Infof("Route table %q not found", name)
+		return nil, nil
+	}
+
+	return &rt, nil
+}
+
 func (az *Cloud) newRouteTableCache() (*azcache.TimedCache, error) {
 	getter := func(key string) (interface{}, error) {
-		ctx, cancel := getContextWithCancel()
-		defer cancel()
-		rt, err := az.RouteTablesClient.Get(ctx, az.RouteTableResourceGroup, key, "")
-		exists, rerr := checkResourceExistsFromError(err)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-
-		if !exists {
-			klog.V(2).Infof("Route table %q not found", key)
-			return nil, nil
-		}
-
-		return &rt, nil
+		return az.routeTableClientGet(key)
 	}
 
 	if az.RouteTableCacheTTLInSeconds == 0 {
 		az.RouteTableCacheTTLInSeconds = routeTableCacheTTLDefaultInSeconds
 	}
 	return azcache.NewTimedcache(time.Duration(az.RouteTableCacheTTLInSeconds)*time.Second, getter)
+}
+
+func (az *Cloud) pipClientList(pipRG string) (*[]network.PublicIPAddress, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+
+	pipList, rerr := az.PublicIPAddressesClient.List(ctx, pipRG)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	return &pipList, nil
 }
 
 func (az *Cloud) newPIPCache() (*azcache.TimedCache, error) {
@@ -341,39 +419,42 @@ func (az *Cloud) newPIPCache() (*azcache.TimedCache, error) {
 	return azcache.NewTimedcache(time.Duration(az.PublicIPCacheTTLInSeconds)*time.Second, getter)
 }
 
+func (az *Cloud) plsClientGet(fipConfigID string) (interface{}, error) {
+	ctx, cancel := getContextWithCancel()
+	defer cancel()
+	plsList, err := az.PrivateLinkServiceClient.List(ctx, az.PrivateLinkServiceResourceGroup)
+	exists, rerr := checkResourceExistsFromError(err)
+	if rerr != nil {
+		return nil, rerr.Error()
+	}
+
+	if exists {
+		for i := range plsList {
+			pls := plsList[i]
+			if pls.PrivateLinkServiceProperties == nil {
+				continue
+			}
+			fipConfigs := pls.PrivateLinkServiceProperties.LoadBalancerFrontendIPConfigurations
+			if fipConfigs == nil {
+				continue
+			}
+			for _, fipConfig := range *fipConfigs {
+				if strings.EqualFold(*fipConfig.ID, fipConfigID) {
+					return &pls, nil
+				}
+			}
+		}
+	}
+
+	klog.V(2).Infof("No privateLinkService found for frontendIPConfig %q", fipConfigID)
+	plsNotExistID := consts.PrivateLinkServiceNotExistID
+	return &network.PrivateLinkService{ID: &plsNotExistID}, nil
+}
+
 func (az *Cloud) newPLSCache() (*azcache.TimedCache, error) {
 	// for PLS cache, key is LBFrontendIPConfiguration ID
 	getter := func(key string) (interface{}, error) {
-		ctx, cancel := getContextWithCancel()
-		defer cancel()
-		plsList, err := az.PrivateLinkServiceClient.List(ctx, az.PrivateLinkServiceResourceGroup)
-		exists, rerr := checkResourceExistsFromError(err)
-		if rerr != nil {
-			return nil, rerr.Error()
-		}
-
-		if exists {
-			for i := range plsList {
-				pls := plsList[i]
-				if pls.PrivateLinkServiceProperties == nil {
-					continue
-				}
-				fipConfigs := pls.PrivateLinkServiceProperties.LoadBalancerFrontendIPConfigurations
-				if fipConfigs == nil {
-					continue
-				}
-				for _, fipConfig := range *fipConfigs {
-					if strings.EqualFold(*fipConfig.ID, key) {
-						return &pls, nil
-					}
-				}
-
-			}
-		}
-
-		klog.V(2).Infof("No privateLinkService found for frontendIPConfig %q", key)
-		plsNotExistID := consts.PrivateLinkServiceNotExistID
-		return &network.PrivateLinkService{ID: &plsNotExistID}, nil
+		return az.plsClientGet(key)
 	}
 
 	if az.PlsCacheTTLInSeconds == 0 {
