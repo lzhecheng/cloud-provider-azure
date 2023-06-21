@@ -154,7 +154,10 @@ func (ss *ScaleSet) getVMSS(vmssName string, crt azcache.AzureCacheReadType) (*c
 		var vmsses *sync.Map
 		var err error
 		if ss.Cloud.Config.DisableAPICallCache {
-			vmsses, _, err = ss.vmssClientList(context.Background())
+			ctx, cancel := getContextWithCancel()
+			defer cancel()
+
+			vmsses, _, err = ss.vmssClientList(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -806,7 +809,10 @@ func (ss *ScaleSet) getNodeIdentityByNodeName(nodeName string, crt azcache.Azure
 		var vmsses *sync.Map
 		var err error
 		if ss.Cloud.Config.DisableAPICallCache {
-			vmsses, _, err = ss.vmssClientList(context.Background())
+			ctx, cancel := getContextWithCancel()
+			defer cancel()
+
+			vmsses, _, err = ss.vmssClientList(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -1667,7 +1673,10 @@ func (ss *ScaleSet) ensureBackendPoolDeletedFromVMSS(backendPoolIDs []string, vm
 		var vmssUniformMap *sync.Map
 		var err error
 		if ss.Cloud.Config.DisableAPICallCache {
-			vmssUniformMap, _, err = ss.vmssClientList(context.Background())
+			ctx, cancel := getContextWithCancel()
+			defer cancel()
+
+			vmssUniformMap, _, err = ss.vmssClientList(ctx)
 			if err != nil {
 				return err
 			}
@@ -1735,7 +1744,10 @@ func (ss *ScaleSet) ensureBackendPoolDeletedFromVmssUniform(backendPoolIDs []str
 		var vmssUniformMap *sync.Map
 		var err error
 		if ss.Cloud.Config.DisableAPICallCache {
-			vmssUniformMap, _, err = ss.vmssClientList(context.Background())
+			ctx, cancel := getContextWithCancel()
+			defer cancel()
+
+			vmssUniformMap, _, err = ss.vmssClientList(ctx)
 			if err != nil {
 				return err
 			}
