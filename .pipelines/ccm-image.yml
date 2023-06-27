@@ -23,7 +23,7 @@ steps:
       popd
 
       export IMAGE_TAG="$(git describe --tags)"
-      kubetest2 aks --build --target ccm --targetPath `pwd`
+      # kubetest2 aks --build --target ccm --targetPath `pwd`
     displayName: make and push ccm image
     env:
       REGISTRY_URL: $(registry.url)
