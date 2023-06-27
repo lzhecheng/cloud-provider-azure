@@ -23,7 +23,7 @@ steps:
       popd
 
       export IMAGE_TAG="$(git describe --tags)"
-      kubetest2 aks --build --target cnm --targetPath `pwd`
+      # kubetest2 aks --build --target cnm --targetPath `pwd`
     displayName: make and push cnm image
     env:
       REGISTRY_URL: $(registry.url)

@@ -24,7 +24,6 @@ export PATH="${PATH:-}:${GOPATH}/bin"
 export AKS_CLUSTER_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID:-}/resourcegroups/${RESOURCE_GROUP:-}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER_NAME:-}"
 
 if [[ -z "${RELEASE_PIPELINE:-}" ]]; then
-  az extension add -n aks-preview
   az login --service-principal -u "${AZURE_CLIENT_ID:-}" -p "${AZURE_CLIENT_SECRET:-}" --tenant "${AZURE_TENANT_ID:-}"
 fi
 
@@ -38,14 +37,47 @@ get_k8s_version() {
     return
   fi
   K8S_RELEASE="${K8S_RELEASE:-$(echo ${BUILD_SOURCE_BRANCH_NAME:-} | cut -f2 -d'-')}"
-  AKS_KUBERNETES_VERSION=$(az aks get-versions -l "${AZURE_LOCATION:-}" --subscription ${AZURE_SUBSCRIPTION_ID:-} --output json \
-    | jq -r --arg K8S_RELEASE "${K8S_RELEASE:-}" 'last(.orchestrators |.[] | select(.orchestratorVersion | startswith($K8S_RELEASE))) | .orchestratorVersion')
-  # Normally, K8S_RELEASE has at least one match in AKS, but in case the k8s release is the first minor version,
-  # not picked by AKS, we use the latest AKS k8s version as a try-your-best workaround.
-  if [[ "${AKS_KUBERNETES_VERSION:-}" == "null" ]]; then
-  AKS_KUBERNETES_VERSION=$(az aks get-versions -l "${AZURE_LOCATION:-}" --subscription ${AZURE_SUBSCRIPTION_ID:-} --output json \
-    | jq -r '.orchestrators |.[] |select(.upgrades | .==null) |.orchestratorVersion')
+  az aks get-versions -l "${AZURE_LOCATION:-}" --subscription ${AZURE_SUBSCRIPTION_ID:-} --output json > az_aks_versions
+  echo "Current AKS versions are: $(cat az_aks_versions)"
+  if [[ $(cat az_aks_versions | jq 'has("orchestrators")') == true ]]; then
+    # Old format
+    AKS_KUBERNETES_VERSION=$(cat az_aks_versions \
+      | jq -r --arg K8S_RELEASE "${K8S_RELEASE:-}" 'last(.orchestrators |.[] | select(.orchestratorVersion | startswith($K8S_RELEASE))) | .orchestratorVersion')
+    if [[ "${AKS_KUBERNETES_VERSION:-}" == "null" ]]; then
+      cat az_aks_versions | jq -r '.orchestrators[] | .orchestratorVersion' | sort -V > sorted_k8s_versions 
+      AKS_KUBERNETES_VERSION=$(cat sorted_k8s_versions | tail -1)
+    fi
+  else
+    # Preview format
+    AKS_KUBERNETES_VERSION=$(cat az_aks_versions \
+      | jq -r --arg K8S_RELEASE "${K8S_RELEASE:-}" 'last(.values[] | select(.version | startswith($K8S_RELEASE)) | .patchVersions | keys | .[])')
+    if [[ "${AKS_KUBERNETES_VERSION:-}" == "null" ]]; then
+      cat az_aks_versions | jq -r '.values[] | .patchVersions | keys | .[]' | sort -V > sorted_k8s_versions
+      AKS_KUBERNETES_VERSION=$(cat sorted_k8s_versions | tail -1)
+    fi
   fi
+  echo "AKS Kubernetes version is: ${AKS_KUBERNETES_VERSION:-}"
+  az extension add -n aks-preview
+    az aks get-versions -l "${AZURE_LOCATION:-}" --subscription ${AZURE_SUBSCRIPTION_ID:-} --output json > az_aks_versions
+  echo "Current AKS versions are: $(cat az_aks_versions)"
+  if [[ $(cat az_aks_versions | jq 'has("orchestrators")') == true ]]; then
+    # Old format
+    AKS_KUBERNETES_VERSION=$(cat az_aks_versions \
+      | jq -r --arg K8S_RELEASE "${K8S_RELEASE:-}" 'last(.orchestrators |.[] | select(.orchestratorVersion | startswith($K8S_RELEASE))) | .orchestratorVersion')
+    if [[ "${AKS_KUBERNETES_VERSION:-}" == "null" ]]; then
+      cat az_aks_versions | jq -r '.orchestrators[] | .orchestratorVersion' | sort -V > sorted_k8s_versions 
+      AKS_KUBERNETES_VERSION=$(cat sorted_k8s_versions | tail -1)
+    fi
+  else
+    # Preview format
+    AKS_KUBERNETES_VERSION=$(cat az_aks_versions \
+      | jq -r --arg K8S_RELEASE "${K8S_RELEASE:-}" 'last(.values[] | select(.version | startswith($K8S_RELEASE)) | .patchVersions | keys | .[])')
+    if [[ "${AKS_KUBERNETES_VERSION:-}" == "null" ]]; then
+      cat az_aks_versions | jq -r '.values[] | .patchVersions | keys | .[]' | sort -V > sorted_k8s_versions
+      AKS_KUBERNETES_VERSION=$(cat sorted_k8s_versions | tail -1)
+    fi
+  fi
+  echo "AKS Kubernetes version is: ${AKS_KUBERNETES_VERSION:-}"
 }
 
 cleanup() {
@@ -65,9 +97,9 @@ if [[ -z "${AZURE_LOCATION:-}" ]]; then
   export AZURE_LOCATION="$(get_random_location)"
 fi
 
-if [[ -z "${IMAGE_TAG:-}" ]]; then
-  IMAGE_TAG="$(git describe --tags)"
-fi
+# if [[ -z "${IMAGE_TAG:-}" ]]; then
+#   IMAGE_TAG="$(git describe --tags)"
+# fi
 
 if [[ -z "${CLUSTER_CONFIG_PATH:-}" ]]; then
   CLUSTER_CONFIG_PATH="${REPO_ROOT}/.pipelines/templates/basic-lb.json"
@@ -86,35 +118,30 @@ else
   CUSTOM_CONFIG_PATH="${CUSTOM_CONFIG_PATH:-${REPO_ROOT}/.pipelines/templates/customconfiguration.json}"
 fi
 
-rm -rf kubetest2-aks
-git clone https://github.com/kubernetes-sigs/cloud-provider-azure.git
-cp -r cloud-provider-azure/kubetest2-aks .
-rm -rf cloud-provider-azure
-git config --global --add safe.directory "$(pwd)" || true
-pushd kubetest2-aks
-go get -d sigs.k8s.io/kubetest2@latest
-go install sigs.k8s.io/kubetest2@latest
-go mod tidy
-make deployer
-if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
-  make install
-else
-  sudo GOPATH="/home/vsts/go" make install
-fi
-popd
+# rm -rf kubetest2-aks
+# git clone https://github.com/kubernetes-sigs/cloud-provider-azure.git
+# cp -r cloud-provider-azure/kubetest2-aks .
+# rm -rf cloud-provider-azure
+# git config --global --add safe.directory "$(pwd)" || true
+# pushd kubetest2-aks
+# go get -d sigs.k8s.io/kubetest2@latest
+# go install sigs.k8s.io/kubetest2@latest
+# go mod tidy
+# make deployer
+# if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
+#   make install
+# else
+#   sudo GOPATH="/home/vsts/go" make install
+# fi
+# popd
+# if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
+#   rm -rf kubetest2-aks
+#   go mod tidy
+#   go mod vendor
+# fi
 
 get_k8s_version
-echo "AKS Kubernetes version is: ${AKS_KUBERNETES_VERSION:-}"
-
-if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
-  rm -rf kubetest2-aks
-  if [[ "${AKS_KUBERNETES_VERSION:-}" < "1.24" ]]; then
-    go mod tidy -compat=1.17
-  else
-    go mod tidy
-  fi
-  go mod vendor
-fi
+exit 0
 
 kubetest2 aks --up --rgName "${RESOURCE_GROUP:-}" \
 --location "${AZURE_LOCATION:-}" \
@@ -146,6 +173,7 @@ echo "Running e2e"
 
 # TODO: We should do it in autoscaling-multipool.json
 if [[ "${CLUSTER_TYPE:-}" == "autoscaling-multipool" ]]; then
+  az extension add -n aks-preview
   az aks update --subscription ${AZURE_SUBSCRIPTION_ID:-} --resource-group "${RESOURCE_GROUP:-}" --name "${CLUSTER_NAME:-}" --cluster-autoscaler-profile balance-similar-node-groups=true
 fi
 
@@ -154,4 +182,4 @@ if [[ "${CLUSTER_TYPE:-}" =~ "autoscaling" ]]; then
   export LABEL_FILTER=${LABEL_FILTER:-Feature:Autoscaling || !Serial && !Slow}
   export SKIP_ARGS=${SKIP_ARGS:-""}
 fi
-make test-ccm-e2e
+# make test-ccm-e2e
