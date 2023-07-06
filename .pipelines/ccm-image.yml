@@ -3,7 +3,9 @@ steps:
     inputs:
       version: '1.19'
   - bash: |
-      git show --stat
+      set -x
+      # git show --stat
+      git log | head -n 50
       echo $REGISTRY_PASSWORD | docker login $REGISTRY_URL -u $REGISTRY_USERNAME --password-stdin
       export IMAGE_REGISTRY=$REGISTRY_URL
       export GOPATH="/home/vsts/go"

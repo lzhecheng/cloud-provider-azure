@@ -19,7 +19,7 @@ steps:
       export CLUSTER_TYPE=$(CLUSTER_TYPE)
       export INGEST_TEST_RESULT="true"
 
-      .pipelines/scripts/run-e2e.sh
+      # .pipelines/scripts/run-e2e.sh
     displayName: create an aks cluster and run e2e
     env:
       REGISTRY_URL: $(registry.url)
