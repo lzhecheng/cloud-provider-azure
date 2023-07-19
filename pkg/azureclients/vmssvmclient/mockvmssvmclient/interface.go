@@ -54,6 +54,20 @@ func (m *MockInterface) EXPECT() *MockInterfaceMockRecorder {
 	return m.recorder
 }
 
+// Delete mocks base method.
+func (m *MockInterface) Delete(ctx context.Context, resourceGroupName, VMScaleSetName, instanceID string) *retry.Error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, resourceGroupName, VMScaleSetName, instanceID)
+	ret0, _ := ret[0].(*retry.Error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockInterfaceMockRecorder) Delete(ctx, resourceGroupName, VMScaleSetName, instanceID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockInterface)(nil).Delete), ctx, resourceGroupName, VMScaleSetName, instanceID)
+}
+
 // Get mocks base method.
 func (m *MockInterface) Get(ctx context.Context, resourceGroupName, VMScaleSetName, instanceID string, expand compute.InstanceViewTypes) (compute.VirtualMachineScaleSetVM, *retry.Error) {
 	m.ctrl.T.Helper()

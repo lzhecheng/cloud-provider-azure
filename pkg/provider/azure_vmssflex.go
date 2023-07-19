@@ -1037,3 +1037,8 @@ func (fs *FlexScaleSet) ensureBackendPoolDeletedFromNode(vmssFlexVMNameMap map[s
 	}
 	return nicUpdated.Load(), nil
 }
+
+// TODO
+func (fs *FlexScaleSet) DeleteSpecificNodeInstance(nodeName string) error {
+	return nil
+}

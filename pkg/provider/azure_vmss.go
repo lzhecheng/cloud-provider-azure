@@ -2286,3 +2286,32 @@ func (ss *ScaleSet) VMSSBatchSize(vmssName string) (int, error) {
 	klog.V(2).InfoS("Fetch VMSS batch size", "vmss", vmssName, "size", batchSize)
 	return batchSize, nil
 }
+
+// DeleteSpecificNodeInstance deletes the specified VMSS VM instance.
+func (ss *ScaleSet) DeleteSpecificNodeInstance(nodeName string) error {
+	vmSetName, instanceID, err := getVMSSVMInfo(nodeName)
+	if err != nil {
+		return err
+	}
+	rerr := ss.VirtualMachineScaleSetVMsClient.Delete(context.Background(), ss.ResourceGroup, vmSetName, instanceID)
+	if rerr != nil {
+		return rerr.Error()
+	}
+	klog.V(4).Infof("Deleted VMSS VM instance: VMSet %q, instance ID %q", vmSetName, instanceID)
+	return nil
+}
+
+// getVMSSVMInfo returns VMSet name and instance ID of the VMSS VM from the Node name.
+func getVMSSVMInfo(nodeName string) (string, string, error) {
+	splits := strings.Split(nodeName, "-")
+	name := strings.Join(splits[:len(splits)-1], "-")
+	if len(splits[len(splits)-1]) < 5 {
+		return "", "", fmt.Errorf("invalid Node name %s", nodeName)
+	}
+	suffix := splits[len(splits)-1][4:]
+	idx, err := strconv.Atoi(suffix)
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf("%s-vmss", name), fmt.Sprintf("%d", idx), nil
+}

@@ -78,6 +78,14 @@ func (m *MockVMSet) DeleteCacheForNode(nodeName string) error {
 	return ret0
 }
 
+// DeleteSpecificNodeInstance mocks delete specific Node instance.
+func (m *MockVMSet) DeleteSpecificNodeInstance(nodeName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSpecificNodeInstance", nodeName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
 // DeleteCacheForNode indicates an expected call of DeleteCacheForNode.
 func (mr *MockVMSetMockRecorder) DeleteCacheForNode(nodeName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

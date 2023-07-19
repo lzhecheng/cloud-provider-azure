@@ -54,4 +54,7 @@ type Interface interface {
 
 	// UpdateVMs updates a list of VirtualMachineScaleSetVM from map[instanceID]compute.VirtualMachineScaleSetVM.
 	UpdateVMs(ctx context.Context, resourceGroupName string, VMScaleSetName string, instances map[string]compute.VirtualMachineScaleSetVM, source string, batchSize int) *retry.Error
+
+	// Delete deletes a VirtualMachineScaleSet VM.
+	Delete(ctx context.Context, resourceGroupName string, VMScaleSetName string, instanceID string) *retry.Error
 }

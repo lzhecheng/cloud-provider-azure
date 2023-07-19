@@ -36,9 +36,9 @@ const (
 // Interface is the client interface for AvailabilitySet.
 // Don't forget to run "hack/update-mock-clients.sh" command to generate the mock client.
 type Interface interface {
-	// Get gets a VirtualMachineScaleSet.
+	// Get gets a AvailabilitySet.
 	Get(ctx context.Context, resourceGroupName string, VMScaleSetName string) (result compute.AvailabilitySet, rerr *retry.Error)
 
-	// List gets a list of VirtualMachineScaleSets in the resource group.
+	// List gets a list of AvailabilitySet in the resource group.
 	List(ctx context.Context, resourceGroupName string) (result []compute.AvailabilitySet, rerr *retry.Error)
 }

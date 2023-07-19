@@ -122,6 +122,36 @@ func (c *Client) Get(ctx context.Context, resourceGroupName string, VMScaleSetNa
 	return result, nil
 }
 
+func (c *Client) Delete(ctx context.Context, resourceGroupName string, VMScaleSetName string, instanceID string) *retry.Error {
+	mc := metrics.NewMetricContext("vmssvm", "delete", resourceGroupName, c.subscriptionID, "")
+
+	// Report errors if the client is rate limited.
+	if !c.rateLimiterReader.TryAccept() {
+		mc.RateLimitedCount()
+		return retry.GetRateLimitError(false, "VMSSVMDelete")
+	}
+
+	// Report errors if the client is throttled.
+	if c.RetryAfterReader.After(time.Now()) {
+		mc.ThrottledCount()
+		rerr := retry.GetThrottlingError("VMSSVMDelete", "client throttled", c.RetryAfterReader)
+		return rerr
+	}
+
+	rerr := c.deleteVMSSVM(ctx, resourceGroupName, VMScaleSetName, instanceID)
+	mc.Observe(rerr)
+	if rerr != nil {
+		if rerr.IsThrottled() {
+			// Update RetryAfterReader so that no more requests would be sent until RetryAfter expires.
+			c.RetryAfterReader = rerr.RetryAfter
+		}
+
+		return rerr
+	}
+
+	return nil
+}
+
 // getVMSSVM gets a VirtualMachineScaleSetVM.
 func (c *Client) getVMSSVM(ctx context.Context, resourceGroupName string, VMScaleSetName string, instanceID string, expand compute.InstanceViewTypes) (compute.VirtualMachineScaleSetVM, *retry.Error) {
 	resourceID := armclient.GetChildResourceID(
@@ -152,6 +182,19 @@ func (c *Client) getVMSSVM(ctx context.Context, resourceGroupName string, VMScal
 
 	result.Response = autorest.Response{Response: response}
 	return result, nil
+}
+
+func (c *Client) deleteVMSSVM(ctx context.Context, resourceGroupName string, VMScaleSetName string, instanceID string) *retry.Error {
+	resourceID := armclient.GetChildResourceID(
+		c.subscriptionID,
+		resourceGroupName,
+		vmssResourceType,
+		VMScaleSetName,
+		vmResourceType,
+		instanceID,
+	)
+
+	return c.armClient.DeleteResource(ctx, resourceID)
 }
 
 // List gets a list of VirtualMachineScaleSetVMs in the virtualMachineScaleSet.

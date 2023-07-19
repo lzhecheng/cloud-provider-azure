@@ -111,4 +111,7 @@ type VMSet interface {
 
 	// DeleteCacheForNode removes the node entry from cache.
 	DeleteCacheForNode(nodeName string) error
+
+	// DeleteSpecificNode removes the instance from Azure.
+	DeleteSpecificNodeInstance(nodeName string) error
 }

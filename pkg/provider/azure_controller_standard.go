@@ -130,6 +130,64 @@ func (as *availabilitySet) DeleteCacheForNode(nodeName string) error {
 	return err
 }
 
+// DeleteSpecificNodeInstance deletes a specific Node instance.
+func (as *availabilitySet) DeleteSpecificNodeInstance(nodeName string) error {
+	nodeResourceGroup, err := as.GetNodeResourceGroup(nodeName)
+	if err != nil {
+		return err
+	}
+
+	rerr := as.VirtualMachinesClient.Delete(context.Background(), nodeResourceGroup, nodeName)
+	if rerr != nil {
+		return rerr.Error()
+	}
+	klog.V(4).Infof("Deleted VM %q", nodeName)
+
+	// subID := as.SubscriptionID
+	// diskName, err := as.getDiskNameFromNodeName(subID, nodeResourceGroup, nodeName)
+	// if err != nil {
+	// 	return err
+	// }
+	// rerr = as.DisksClient.Delete(context.Background(), subID, nodeResourceGroup, diskName)
+	// if rerr != nil {
+	// 	return rerr.Error()
+	// }
+	// klog.V(4).Infof("Deleted disk %q", diskName)
+
+	nicName := getNICNameFromNodeName(nodeName)
+	rerr = as.InterfacesClient.Delete(context.Background(), nodeResourceGroup, nicName)
+	if rerr != nil {
+		return rerr.Error()
+	}
+	klog.V(4).Infof("Deleted NIC %q", nicName)
+
+	return nil
+}
+
+// getDiskNameFromNodeName gets disk name from Node name.
+func (as *availabilitySet) getDiskNameFromNodeName(subID, nodeRG, nodeName string) (string, error) {
+	disks, rerr := as.DisksClient.ListByResourceGroup(context.Background(), subID, nodeRG)
+	if rerr != nil {
+		return "", rerr.Error()
+	}
+
+	for _, disk := range disks {
+		diskName := pointer.StringDeref(disk.Name, "")
+		if strings.Contains(diskName, nodeName) {
+			return diskName, nil
+		}
+	}
+
+	return "", fmt.Errorf("no disk found with subID %q, resource group %q, Node name %q", subID, nodeRG, nodeName)
+}
+
+// getNICNameFromNodeName gets NIC name from Node name.
+func getNICNameFromNodeName(nodeName string) string {
+	splits := strings.Split(nodeName, "-")
+	nicName := strings.Join(splits[:len(splits)-1], "-") + "-nic-" + splits[len(splits)-1]
+	return nicName
+}
+
 // WaitForUpdateResult waits for the response of the update request
 func (as *availabilitySet) WaitForUpdateResult(ctx context.Context, future *azure.Future, nodeName types.NodeName, source string) error {
 	vmName := mapNodeNameToVMName(nodeName)

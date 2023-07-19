@@ -3265,3 +3265,28 @@ func TestScaleSet_VMSSBatchSize(t *testing.T) {
 		assert.Equal(t, 0, batchSize)
 	})
 }
+
+func TestGetVMSSVMInfo(t *testing.T) {
+	testcases := []struct {
+		desc                 string
+		nodeName             string
+		expectedVMSet string
+		expectedInstanceID string
+	}{
+		{
+			desc:                 "normal",
+			nodeName:             "aks-nodepool1-38963764-vmss000000",
+			expectedVMSet: "aks-nodepool1-38963764-vmss",
+			expectedInstanceID: "0",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.desc, func(t *testing.T) {
+			vmSet, instanceID, err := getVMSSVMInfo(tc.nodeName)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedVMSet, vmSet)
+			assert.Equal(t, tc.expectedInstanceID, instanceID)
+		})
+	}
+}
