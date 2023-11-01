@@ -17,6 +17,7 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+set -x
 
 REPO_ROOT=$(realpath $(dirname "${BASH_SOURCE[0]}")/../..)
 export GOPATH="/home/vsts/go"
