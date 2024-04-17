@@ -181,6 +181,9 @@ if [[ "${CLUSTER_TYPE:-}" =~ "autoscaling" ]]; then
   fi
 fi
 
+# Disable azure-policy in test env to avoid unnecessary rule check
+az aks update --subscription ${AZURE_SUBSCRIPTION_ID:-} --resource-group "${RESOURCE_GROUP:-}" --name "${CLUSTER_NAME:-}" --tags "SkipAKSCluster=true"
+
 if [[ "${SKIP_E2E:-}" != "true" ]]; then
   echo "Running e2e"
   export E2E_ON_AKS_CLUSTER=true
