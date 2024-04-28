@@ -17,15 +17,20 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+set -x
 
 REPO_ROOT=$(realpath $(dirname "${BASH_SOURCE[0]}")/../..)
-export GOPATH="/home/vsts/go"
-export PATH="${PATH:-}:${GOPATH}/bin"
-export AKS_CLUSTER_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID:-}/resourcegroups/${RESOURCE_GROUP:-}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER_NAME:-}"
-
-if [[ -z "${RELEASE_PIPELINE:-}" ]]; then
-  az login --service-principal -u "${AZURE_CLIENT_ID:-}" -p "${AZURE_CLIENT_SECRET:-}" --tenant "${AZURE_TENANT_ID:-}"
+USER="cloudtest"
+if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
+  USER="vsts"
+else
+  az login --identity --username "${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}"
+  export AZURE_MANAGED_IDENTITY_TYPE="systemassigned"
 fi
+
+export GOPATH="/home/${USER}/go"
+export PATH="${PATH}:${GOPATH}/bin"
+export AKS_CLUSTER_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID:-}/resourcegroups/${RESOURCE_GROUP:-}/providers/Microsoft.ContainerService/managedClusters/${CLUSTER_NAME:-}"
 
 get_random_location() {
   local LOCATIONS=("eastus")
@@ -82,6 +87,7 @@ fi
 # TODO: remove this and use user-input CUSTOM_CCM_IMAGE_TAG to defined the image tag for
 # cloud provider azure. This will remove dependency on cloud-provider-azure repo, and use
 # explicit variables makes the interface more clear.
+IMAGE_TAG="v1.24.0-3189-g9096afd6a"
 if [[ -z "${IMAGE_TAG:-}" ]]; then
   IMAGE_TAG="$(git describe --tags --match "v[0-9].*")"
 fi
@@ -116,7 +122,7 @@ if [[ "${SKIP_BUILD_KUBETEST2_AKS:-}" != "true" ]]; then
   # Considering building kubetest2-aks has no dependency on cloud-provider-azure repo, and to avoid
   # the potential conflict between the cloud-provider-azure repo and the kubetest2-aks, we use a
   # tmp folder to clone the cloud-provider-azure repo and build kubetest2-aks. 
-  git clone https://github.com/kubernetes-sigs/cloud-provider-azure.git /tmp/cloud-provider-azure
+  git clone https://github.com/lzhecheng/cloud-provider-azure.git /tmp/cloud-provider-azure
   pushd /tmp/cloud-provider-azure/kubetest2-aks
   go get -d sigs.k8s.io/kubetest2@latest
   go install sigs.k8s.io/kubetest2@latest
@@ -125,7 +131,7 @@ if [[ "${SKIP_BUILD_KUBETEST2_AKS:-}" != "true" ]]; then
   if [[ -n "${RELEASE_PIPELINE:-}" ]]; then
     make install
   else
-    sudo GOPATH="/home/vsts/go" make install
+    sudo GOPATH="/home/${USER}/go" make install
   fi
   rm /tmp/cloud-provider-azure -rf
   popd
