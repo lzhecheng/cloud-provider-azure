@@ -261,13 +261,25 @@ func updateAzureCredential(mcConfig *armcontainerservicev2.ManagedCluster) {
 		return
 	}
 	// Managed identity is preferable over service principal and picked by default when creating an AKS cluster.
-	// TODO(mainred): we can consider supporting user-assigned managed identity.
-	klog.Infof("System assigned managed identity is used to manage cluster resource group")
 	// Reset `ServicePrincipalProfile` in case service principal is defined in templates while managed identity is used.
 	mcConfig.Properties.ServicePrincipalProfile = nil
-	systemAssignedIdentity := armcontainerservicev2.ResourceIdentityTypeSystemAssigned
-	mcConfig.Identity = &armcontainerservicev2.ManagedClusterIdentity{
-		Type: &systemAssignedIdentity,
+	klog.Infof("%s managed identity is used to manage cluster resource group", identityType)
+	if identityType == string(systemAssignedManagedIdentity) {
+		systemAssignedIdentity := armcontainerservicev2.ResourceIdentityTypeSystemAssigned
+		mcConfig.Identity = &armcontainerservicev2.ManagedClusterIdentity{
+			Type: &systemAssignedIdentity,
+		}
+	} else if identityType == string(userAssignedIdentity) {
+		userAssignedIdentity := armcontainerservicev2.ResourceIdentityTypeUserAssigned
+		mcConfig.Identity = &armcontainerservicev2.ManagedClusterIdentity{
+			Type: &userAssignedIdentity,
+			UserAssignedIdentities: map[string]*armcontainerservicev2.ManagedServiceIdentityUserAssignedIdentitiesValue{
+				identityID: {
+					ClientID:    pointer.String(identityClientID),
+					PrincipalID: pointer.String(identityPrincipalID),
+				},
+			},
+		}
 	}
 }
 

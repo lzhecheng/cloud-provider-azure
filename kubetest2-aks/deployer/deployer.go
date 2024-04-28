@@ -34,14 +34,25 @@ const Name = "aks"
 var (
 	GitTag string
 
-	subscriptionID = os.Getenv("AZURE_SUBSCRIPTION_ID")
-	clientID       = os.Getenv("AZURE_CLIENT_ID")
-	clientSecret   = os.Getenv("AZURE_CLIENT_SECRET")
-	imageRegistry  = os.Getenv("IMAGE_REGISTRY")
-	registryURL    = os.Getenv("REGISTRY_URL")
-	registryRepo   = os.Getenv("REGISTRY_REPO")
-	imageTagEnvVar = os.Getenv("IMAGE_TAG")
-	ctx            = context.Background()
+	subscriptionID      = os.Getenv("AZURE_SUBSCRIPTION_ID")
+	clientID            = os.Getenv("AZURE_CLIENT_ID")
+	clientSecret        = os.Getenv("AZURE_CLIENT_SECRET")
+	imageRegistry       = os.Getenv("IMAGE_REGISTRY")
+	registryURL         = os.Getenv("REGISTRY_URL")
+	registryRepo        = os.Getenv("REGISTRY_REPO")
+	imageTagEnvVar      = os.Getenv("IMAGE_TAG")
+	identityType        = os.Getenv("AZURE_MANAGED_IDENTITY_TYPE")
+	identityID          = os.Getenv("AZURE_MANAGED_IDENTITY_ID")
+	identityPrincipalID = os.Getenv("AZURE_MANAGED_IDENTITY_PRINCIPAL_ID")
+	identityClientID    = os.Getenv("AZURE_MANAGED_IDENTITY_CLIENT_ID")
+	ctx                 = context.Background()
+)
+
+type managedIdentity string
+
+const (
+	systemAssignedManagedIdentity managedIdentity = "systemassigned"
+	userAssignedIdentity          managedIdentity = "userassigned"
 )
 
 type deployer struct {

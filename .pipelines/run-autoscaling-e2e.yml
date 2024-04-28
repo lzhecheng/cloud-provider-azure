@@ -9,8 +9,7 @@ trigger: none
 
 pr: none
 
-pool:
-  vmImage: ubuntu-latest
+pool: cloud-provider-azure-e2e-pool
 
 variables:
 - template: var-e2e.yml
@@ -19,16 +18,16 @@ stages:
   - stage: run_autoscaling_e2e
     dependsOn: []
     jobs:
-    - job: build_push_ccm_image_job
-      timeoutInMinutes: 30
-      steps:
-        - template: ./ccm-image.yml
-    - job: build_push_cnm_image_job
-      timeoutInMinutes: 30
-      steps:
-        - template: ./cnm-image.yml
+    # - job: build_push_ccm_image_job
+    #   timeoutInMinutes: 30
+    #   steps:
+    #     - template: ./ccm-image.yml
+    # - job: build_push_cnm_image_job
+    #   timeoutInMinutes: 30
+    #   steps:
+    #     - template: ./cnm-image.yml
     - job: create_aks_cluster_and_run_tests_job
-      dependsOn: [build_push_ccm_image_job, build_push_cnm_image_job]
+      # dependsOn: [build_push_ccm_image_job, build_push_cnm_image_job]
       timeoutInMinutes: 340
       steps:
         - task: GoTool@0
