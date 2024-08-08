@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -48,7 +49,7 @@ func TestGetCredentials(t *testing.T) {
 		"*.azurecr.us",
 	}
 
-	provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(configStr))
+	provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(configStr), "")
 	if err != nil {
 		t.Fatalf("Unexpected error when creating new acr provider: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestGetCredentialsConfig(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(test.configStr))
+		provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(test.configStr), "")
 		if err != nil && !test.expectError {
 			t.Fatalf("Unexpected error when creating new acr provider: %v", err)
 		}
@@ -153,7 +154,7 @@ func TestParseACRLoginServerFromImage(t *testing.T) {
         "aadClientSecret": "bar"
     }`
 
-	provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(configStr))
+	provider, err := newAcrProviderFromConfigReader(bytes.NewBufferString(configStr), "mcr.microsoft.com:abc.azurecr.io")
 	if err != nil {
 		t.Fatalf("Unexpected error when creating new acr provider: %v", err)
 	}
@@ -162,45 +163,84 @@ func TestParseACRLoginServerFromImage(t *testing.T) {
 		ContainerRegistryDNSSuffix: ".azurecr.my.cloud",
 	}
 	tests := []struct {
-		image    string
-		expected string
+		image                     string
+		expectedLoginServer       string
+		expectedLoginServerMirror string
 	}{
 		{
-			image:    "invalidImage",
-			expected: "",
+			image:               "invalidImage",
+			expectedLoginServer: "",
 		},
 		{
-			image:    "docker.io/library/busybox:latest",
-			expected: "",
+			image:               "docker.io/library/busybox:latest",
+			expectedLoginServer: "",
 		},
 		{
-			image:    "foo.azurecr.io/bar/image:version",
-			expected: "foo.azurecr.io",
+			image:               "foo.azurecr.io/bar/image:version",
+			expectedLoginServer: "foo.azurecr.io",
 		},
 		{
-			image:    "foo.azurecr.cn/bar/image:version",
-			expected: "foo.azurecr.cn",
+			image:               "foo.azurecr.cn/bar/image:version",
+			expectedLoginServer: "foo.azurecr.cn",
 		},
 		{
-			image:    "foo.azurecr.de/bar/image:version",
-			expected: "foo.azurecr.de",
+			image:               "foo.azurecr.de/bar/image:version",
+			expectedLoginServer: "foo.azurecr.de",
 		},
 		{
-			image:    "foo.azurecr.us/bar/image:version",
-			expected: "foo.azurecr.us",
+			image:               "foo.azurecr.us/bar/image:version",
+			expectedLoginServer: "foo.azurecr.us",
 		},
 		{
-			image:    "foo.azurecr.my.cloud/bar/image:version",
-			expected: "foo.azurecr.my.cloud",
+			image:               "foo.azurecr.my.cloud/bar/image:version",
+			expectedLoginServer: "foo.azurecr.my.cloud",
 		},
 		{
-			image:    "foo.azurecr.us/foo.azurecr.io/bar/image:version",
-			expected: "foo.azurecr.us",
+			image:               "foo.azurecr.us/foo.azurecr.io/bar/image:version",
+			expectedLoginServer: "foo.azurecr.us",
+		},
+		{
+			image:               "mcr.microsoft.com/bar/image:version",
+			expectedLoginServer: "abc.azurecr.io",
+			expectedLoginServerMirror: "mcr.microsoft.com",
 		},
 	}
 	for _, test := range tests {
-		if loginServer := provider.parseACRLoginServerFromImage(test.image); loginServer != test.expected {
-			t.Errorf("function parseACRLoginServerFromImage returns \"%s\" for image %s, expected \"%s\"", loginServer, test.image, test.expected)
-		}
+		t.Run(test.image, func(t *testing.T) {
+			loginServer,loginServerMirror := provider.parseACRLoginServerFromImage(test.image);
+			assert.Equal(t, loginServer, test.expectedLoginServer)
+			assert.Equal(t, loginServerMirror, test.expectedLoginServerMirror)
+		})
+	}
+}
+
+func TestProcessMirrorMapping(t *testing.T) {
+	testcases := []struct {
+		description      string
+		mirrorMappingStr string
+		expected         map[string]string
+	}{
+		{
+			"multiple",
+			"aaa:bbb,ccc:ddd",
+			map[string]string{
+				"aaa": "bbb",
+				"ccc": "ddd",
+			},
+		},
+		{
+			"single",
+			"aaa:bbb",
+			map[string]string{
+				"aaa": "bbb",
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := processMirrorMapping(tc.mirrorMappingStr)
+			assert.True(t, reflect.DeepEqual(result, tc.expected))
+		})
 	}
 }

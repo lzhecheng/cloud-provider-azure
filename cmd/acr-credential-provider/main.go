@@ -33,6 +33,9 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+
+	var mirrorMappingStr string
+
 	command := &cobra.Command{
 		Use:   "acr-credential-provider configFile",
 		Short: "Acr credential provider for Kubelet",
@@ -44,7 +47,8 @@ func main() {
 				os.Exit(1)
 			}
 
-			acrProvider, err := credentialprovider.NewAcrProvider(args[0])
+			azureConfig := args[0]
+			acrProvider, err := credentialprovider.NewAcrProvider(azureConfig, mirrorMappingStr)
 			if err != nil {
 				klog.Errorf("Failed to initialize ACR provider: %v", err)
 				os.Exit(1)
@@ -59,6 +63,9 @@ func main() {
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
+
+	// Flags
+	command.Flags().StringVarP(&mirrorMappingStr, "mirror-mapping", "m", "", "mirror mapping to use")
 
 	if err := command.Execute(); err != nil {
 		os.Exit(1)

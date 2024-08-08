@@ -58,10 +58,11 @@ type acrProvider struct {
 	config                *providerconfig.AzureAuthConfig
 	environment           *azure.Environment
 	servicePrincipalToken *adal.ServicePrincipalToken
+	mirrorMapping         map[string]string // Mirror mapping relation: source registry -> target registry
 }
 
 // NewAcrProvider creates a new instance of the ACR provider.
-func NewAcrProvider(configFile string) (CredentialProvider, error) {
+func NewAcrProvider(configFile string, mirrorMappingStr string) (CredentialProvider, error) {
 	if len(configFile) == 0 {
 		return nil, errors.New("no azure credential file is provided")
 	}
@@ -72,10 +73,10 @@ func NewAcrProvider(configFile string) (CredentialProvider, error) {
 	}
 	defer f.Close()
 
-	return newAcrProviderFromConfigReader(f)
+	return newAcrProviderFromConfigReader(f, mirrorMappingStr)
 }
 
-func newAcrProviderFromConfigReader(configReader io.Reader) (*acrProvider, error) {
+func newAcrProviderFromConfigReader(configReader io.Reader, mirrorMappingStr string) (*acrProvider, error) {
 	config, env, err := providerconfig.ParseAzureAuthConfig(configReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
@@ -90,11 +91,28 @@ func newAcrProviderFromConfigReader(configReader io.Reader) (*acrProvider, error
 		config:                config,
 		environment:           env,
 		servicePrincipalToken: servicePrincipalToken,
+		mirrorMapping:         processMirrorMapping(mirrorMappingStr),
 	}, nil
 }
 
+// mirrorMappingStr format: "--mirror-mapping=aaa:bbb,ccc:ddd"
+func processMirrorMapping(mirrorMappingStr string) map[string]string {
+	mirrorMapping := map[string]string{}
+
+	mirrorMappingStr = strings.Trim(mirrorMappingStr, " ")
+	for _, mapping := range strings.Split(mirrorMappingStr, ",") {
+		parts := strings.Split(mapping, ":")
+		if len(parts) != 2 {
+			klog.Errorf("Invalid mirror mapping format: %s", mapping)
+			continue
+		}
+		mirrorMapping[parts[0]] = parts[1]
+	}
+	return mirrorMapping
+}
+
 func (a *acrProvider) GetCredentials(_ context.Context, image string, _ []string) (*v1.CredentialProviderResponse, error) {
-	loginServer := a.parseACRLoginServerFromImage(image)
+	loginServer, loginServerMirror := a.parseACRLoginServerFromImage(image)
 	if loginServer == "" {
 		klog.V(2).Infof("image(%s) is not from ACR, return empty authentication", image)
 		return &v1.CredentialProviderResponse{
@@ -126,6 +144,12 @@ func (a *acrProvider) GetCredentials(_ context.Context, image string, _ []string
 		response.Auth[loginServer] = v1.AuthConfig{
 			Username: username,
 			Password: password,
+		}
+		if loginServerMirror != "" {
+			response.Auth[loginServerMirror] = v1.AuthConfig{
+				Username: username,
+				Password: password,
+			}
 		}
 	} else {
 		// Add our entry for each of the supported container registry URLs
@@ -192,10 +216,12 @@ func (a *acrProvider) getFromACR(loginServer string) (string, string, error) {
 // parseACRLoginServerFromImage takes image as parameter and returns login server of it.
 // Parameter `image` is expected in following format: foo.azurecr.io/bar/imageName:version
 // If the provided image is not an acr image, this function will return an empty string.
-func (a *acrProvider) parseACRLoginServerFromImage(image string) string {
-	match := acrRE.FindAllString(image, -1)
+func (a *acrProvider) parseACRLoginServerFromImage(image string) (string, string) {
+	processedImage, mirrorRegistry := a.processImageWithMirrorMapping(image)
+
+	match := acrRE.FindAllString(processedImage, -1)
 	if len(match) == 1 {
-		return match[0]
+		return match[0], mirrorRegistry
 	}
 
 	// handle the custom cloud case
@@ -203,13 +229,22 @@ func (a *acrProvider) parseACRLoginServerFromImage(image string) string {
 		cloudAcrSuffix := a.environment.ContainerRegistryDNSSuffix
 		cloudAcrSuffixLength := len(cloudAcrSuffix)
 		if cloudAcrSuffixLength > 0 {
-			customAcrSuffixIndex := strings.Index(image, cloudAcrSuffix)
+			customAcrSuffixIndex := strings.Index(processedImage, cloudAcrSuffix)
 			if customAcrSuffixIndex != -1 {
 				endIndex := customAcrSuffixIndex + cloudAcrSuffixLength
-				return image[0:endIndex]
+				return processedImage[0:endIndex], ""
 			}
 		}
 	}
 
-	return ""
+	return "", ""
+}
+
+func (a *acrProvider) processImageWithMirrorMapping(image string) (string, string) {
+	for sourceRegistry, targetRegistry := range a.mirrorMapping {
+		if strings.HasPrefix(image, sourceRegistry) {
+			return strings.Replace(image, sourceRegistry, targetRegistry, 1), sourceRegistry
+		}
+	}
+	return image, ""
 }
